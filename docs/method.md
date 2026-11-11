@@ -39,6 +39,10 @@ why.
   version must be in the compiled file's diff.
 - **Move a transitive pip package without pinning it** (`--upgrade-package`). A pin added to
   force one upgrade stays long after its reason has gone.
+- **A worktree doesn't isolate docker compose.** Compose names its project, volumes and images
+  from variables the developer's shell may export, and those override `.env`. A run sets its own
+  names on the command line too, and checks `docker compose config` before starting anything,
+  or its tests can attach to the developer's database.
 - **A run's worktree doesn't run a developer's checkout hooks.** They are set up for that
   developer's checkouts, and one that fails makes the run fail. The project's commit hooks
   still run.

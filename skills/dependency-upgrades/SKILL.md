@@ -1,7 +1,7 @@
 ---
 name: dependency-upgrades
 description: 'This skill should be used when asked to "run the dependency upgrades", "do the Dependabot pass", "triage Dependabot alerts", "apply the easy security upgrades" or "check for easy dependency upgrades" in a project, interactively or unattended (from a scheduler or another agent). It pulls open Dependabot alerts, classifies each against what is actually installed (separating EOL lines, blocked ranges, major bumps and missing fixes from easy upgrades), records every one as a finding, applies the easy upgrades one commit per package, and opens one pull request whose package and alert tables are derived from the lockfiles. It never merges: the PR, with its embedded artifacts, is the hand-off to whoever does.'
-version: 2.5.0
+version: 2.6.0
 ---
 
 # Dependency upgrades
@@ -245,6 +245,21 @@ run here.
 Then the tests: each command in `verify`. If `verify` isn't configured, take the project's test
 command from its `AGENTS.md` (or its README or Makefile), and say in that check's `note` that it
 was chosen this way, not configured. Run them here, or not, as decided in Step 1.6.
+
+**Tests in containers (docker compose).** A run's tests must not use the developer's containers,
+volumes or database. A worktree isn't enough to keep them apart:
+- **Give the run its own compose identity.** Set the project name (and any variable the compose
+  file names its volumes and images after) in the worktree's copy of `.env`, *and* on each
+  command, because variables exported in the shell override `.env`.
+- **Check before starting anything:** `docker compose config` must show the run's project name
+  and volume names, not the developer's.
+- Reuse the developer's built image under the run's name (`docker tag`), rather than rebuilding.
+- Afterwards, remove what the run created: `docker compose down -v` for the run's project, and
+  the extra image tag.
+- **Files the containers wrote into the worktree** (`.pytest_cache`, `*.egg-info`, data
+  directories) may be owned by root. Remove them with a container that mounts only the worktree
+  (`docker run --rm -v <worktree>:/w <an image already present> rm -rf /w/<path> …`) before
+  removing the worktree.
 
 Record each check as you'll write it in the change:
 
