@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.env
+# Run directories: worktrees, alert snapshots, draft artifacts.
+runs/

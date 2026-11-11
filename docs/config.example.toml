@@ -1,0 +1,52 @@
+# A project's .agents/automation.toml, with every key set, for an example project.
+#
+# The file is optional, and so is every key in it. A key the file leaves out is detected from the
+# repository (the GitHub remote, origin/HEAD, compiled requirements headers, tracked npm
+# lockfiles, an ignored .env) or defaulted. So a project only needs the file once a value has to
+# differ, and then only the keys that differ. To see what a project resolves to, and where each
+# value came from, as a starting file:
+#   python3 -I path/to/mason/bin/artifact config <project dir> --toml
+# tests/test_project.py validates this file.
+
+[repo]
+name = 'example-org/example-app'
+main_branch = 'main'
+
+[limits]
+# Open agent PRs across all workflows. A pass that would go over opens nothing new and says so.
+open_agent_prs = 3
+stale_after_days = 14
+
+[verify]
+# Set false only if two worktrees can run the tests at the same time. Tests that run in docker
+# compose with named volumes can't: the volumes are shared between worktrees.
+exclusive = true
+reason = 'docker compose volumes are shared between worktrees'
+# Untracked files a fresh worktree needs before verify commands can run. Copied, never linked.
+worktree_copy = ['.env']
+# CI runs the tests on every pull request. Detected from .circleci/config.yml or
+# .github/workflows/. An unattended run that can't test locally leaves the tests to CI.
+ci = true
+
+[dependency-upgrades]
+pip_requirements = ['requirements/*.txt']
+pip_sources = ['requirements/*.in']
+# Detected from the compiled files' headers when left out. Setting CUSTOM_COMPILE_COMMAND keeps
+# the header the same whichever way the files are compiled, so it doesn't churn in the diff.
+pip_compile = 'CUSTOM_COMPILE_COMMAND="make requirements" pip-compile requirements/base.in'
+npm_projects = ['frontend', 'frontend/admin']
+npm_build = 'npm run build'
+# When left out, the skill takes the test command from the project's AGENTS.md and says so.
+verify = ['make test']
+
+[dependency-retrospective]
+# How far back a retrospective looks when there is no earlier one to continue from.
+period_days = 30
+# How fast each severity should be fixed, in days from the alert opening. Alerts open past these
+# are reported, and so is the time each fixed alert actually took.
+fix_within_days_critical = 3
+fix_within_days_high = 7
+fix_within_days_medium = 30
+fix_within_days_low = 90
+# A package with no release for this long is reported as possibly abandoned.
+stale_after_months = 24

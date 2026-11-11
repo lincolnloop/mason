@@ -1,0 +1,19 @@
+# Tool configuration only. This repository has no installable package and no dependencies.
+
+[tool.ruff]
+line-length = 100
+target-version = 'py312'
+extend-include = ['bin/artifact', 'bin/unattended']
+
+[tool.ruff.format]
+quote-style = 'single'
+
+[tool.ruff.lint]
+select = ['E', 'F', 'I', 'UP', 'B', 'Q']
+ignore = ['E501']
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = 'single'
+
+[tool.ruff.lint.isort]
+known-first-party = ['artifacts']

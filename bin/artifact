@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""The command line the workflow skills call. Run with `python3 -I`, which ignores the current
+directory and environment; this script adds only this repository's own `lib/` to the path."""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'lib'))
+
+from artifacts.cli import main  # noqa: E402
+
+if __name__ == '__main__':
+    sys.exit(main())

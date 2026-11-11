@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Run a workflow unattended against a project: `bin/unattended <workflow> <project>`.
+
+The entry point for a scheduler or another agent. See lib/artifacts/unattended.py."""
+
+import argparse
+import shlex
+import sys
+from pathlib import Path
+
+HUB = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(HUB / 'lib'))
+
+from artifacts import unattended  # noqa: E402
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog='unattended', description=__doc__)
+    parser.add_argument('workflow', choices=sorted(unattended.WORKFLOWS))
+    parser.add_argument('project', type=Path, help='project root')
+    parser.add_argument(
+        '--allow',
+        action='append',
+        default=[],
+        help='another tool the project needs, e.g. "Bash(docker *)"; repeatable',
+    )
+    parser.add_argument(
+        '--trigger',
+        default='bin/unattended',
+        help='what started the run, shown on the PR, e.g. "systemd timer dependency-upgrades.timer"',
+    )
+    parser.add_argument('--claude', default='claude', help='the claude executable')
+    parser.add_argument('--dry-run', action='store_true', help='print the command; run nothing')
+    args = parser.parse_args()
+    if not (args.project / '.git').exists():
+        parser.error(f'{args.project} is not the root of a git repository')
+    command = unattended.command(HUB, args.project, args.workflow, tuple(args.allow), args.claude)
+    if args.dry_run:
+        env = f'AUTOMATION_UNATTENDED=1 AUTOMATION_TRIGGER={shlex.quote(args.trigger)}'
+        print(f'cd {shlex.quote(str(args.project))} && {env} {shlex.join(command)}')
+        return 0
+    status, log = unattended.run(HUB, args.project, args.workflow, command, args.trigger)
+    print(f'{args.workflow} finished with status {status}; log: {log}')
+    return status
+
+
+if __name__ == '__main__':
+    sys.exit(main())
