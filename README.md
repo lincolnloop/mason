@@ -22,8 +22,10 @@ You need, on the machine that runs the workflow:
   Check with `gh api 'repos/<owner>/<repo>/dependabot/alerts?per_page=1'`.
 - Whatever the project needs to recompile its requirements and build: pip-tools for
   pip-compile files, npm for lockfiles.
-- For the Sentry workflows: a Sentry auth token with the `project:read`, `event:read` and
-  `org:read` scopes, as `SENTRY_AUTH_TOKEN`, and the project's `[sentry-errors]` section
+- For the Sentry workflows: a Sentry token with only the `event:read` scope, as
+  `SENTRY_AUTH_TOKEN`. Use a personal auth token, or an internal integration with read access
+  to issues and events; organization auth tokens are for CI and aren't documented to reach these
+  endpoints. You also need the project's `[sentry-errors]` section
   (`sentry_org` and `sentry_project`, which can't be detected).
 
 Then:

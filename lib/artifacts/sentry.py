@@ -1,8 +1,10 @@
 """Read a project's errors from Sentry's REST API, keeping what a fix needs and no personal data.
 
-Authentication is a Sentry auth token in `SENTRY_AUTH_TOKEN` (scopes `project:read`,
-`event:read`, `org:read`), so unattended runs work without an interactive login. Everything is
-read; nothing is changed in Sentry.
+Authentication is a Sentry token in `SENTRY_AUTH_TOKEN`, so unattended runs work without an
+interactive login. Every endpoint used here accepts `event:read`, and nothing more is needed:
+a personal auth token with that scope, or an internal integration with read access to issues
+and events. Organization auth tokens are for CI, and Sentry doesn't document them as reaching
+these endpoints. Everything is read; nothing is changed in Sentry.
 
 **Personal data stays in Sentry.** What these functions return goes to an agent and from there,
 possibly, into a pull request. So an event is cut down to its exception, its in-app stack frames
@@ -176,8 +178,8 @@ def _http_fetch(url: str) -> tuple[Any, str]:
     token = os.environ.get(TOKEN_VARIABLE)
     if not token:
         raise SentryError(
-            f'{TOKEN_VARIABLE} is not set: create a Sentry auth token with the project:read, '
-            'event:read and org:read scopes'
+            f'{TOKEN_VARIABLE} is not set: create a Sentry personal auth token with the '
+            'event:read scope'
         )
     request = urllib.request.Request(
         url,
