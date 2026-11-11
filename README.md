@@ -90,6 +90,13 @@ This runs Claude Code headless from the project. The run:
 Only one run per project happens at a time. A run that finds nothing to upgrade opens no PR.
 Give the `gh` login no more than it needs: reading alerts, pushing branches, opening PRs.
 
+**Tokens** live in one file outside every repository, `~/.config/mason/env`, as `KEY=value`
+lines with `chmod 600`. The systemd unit reads it with `EnvironmentFile`; for an interactive run,
+load it only for that session: `(set -a; . ~/.config/mason/env; set +a; claude --add-dir …)`.
+Never put a token in `.agents/automation.toml` (it is committed) or in the project's `.env`
+(it is copied into every run's worktree). Anything in the session's environment can be read by
+the session, so give each token only the scopes the workflows use.
+
 An interactive Claude Code sign-in expires, so a scheduled job needs a long-lived token: run
 `claude setup-token` and give the job the token it prints, as `CLAUDE_CODE_OAUTH_TOKEN`.
 
@@ -115,8 +122,9 @@ Description=Dependency upgrades for <project>
 
 [Service]
 Type=oneshot
-# CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) and GH_TOKEN, readable only by you.
-EnvironmentFile=%h/.config/automation/env
+# KEY=value lines, readable only by you (chmod 600): CLAUDE_CODE_OAUTH_TOKEN (from
+# `claude setup-token`), GH_TOKEN, and SENTRY_AUTH_TOKEN for the Sentry workflows.
+EnvironmentFile=%h/.config/mason/env
 ExecStart=path/to/mason/bin/unattended dependency-upgrades path/to/<project> --trigger 'systemd timer dependency-upgrades.timer'
 
 # ~/.config/systemd/user/dependency-upgrades.timer
