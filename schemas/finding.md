@@ -36,11 +36,12 @@ it goes into the PR.
 | `id` | Unique within the project. A lowercase slug. |
 | `fingerprint` | `area/slug`, stable across passes (`deps/<ecosystem>/<package>`), so the same package flagged in two passes is recognised as one. |
 | `source.process`, `source.refs` | What found it, and the alert numbers, as `dependabot#<N>`. |
-| `kind` | What happens next. `dependency` goes into the upgrade PR. `investigate` needs a person or its own PR (an EOL line, a major bump, a blocked range). `external` is waiting on someone else, such as an upstream fix. `skill_change` is a change to this repository's skills, proposed by a retrospective. |
+| `kind` | What happens next. `dependency` goes into the upgrade PR. `code_fix` goes into a fix PR. `data_fix` (bad data to correct) and `archive` (noise to archive or resolve in Sentry) need a person. `investigate` needs a person or its own PR (an EOL line, a major bump, a blocked range, an unclear cause). `external` is waiting on someone else, such as an upstream fix. `skill_change` is a change to this repository's skills, proposed by a retrospective. |
 | `title`, `claim` | One line, then the specific claim the evidence supports. |
 | `severity` | `critical`, `important` or `suggestion`. |
 | `evidence[]` | Each item has a `ref` (file, alert, URL), a `note`, and a `status` of `verified` (checked against the files or the advisory) or `inferred`. |
 | `dependency` | The package. Required when `kind` is `dependency`, and allowed on any kind. |
+| `impact` | Optional. How often it happens: `events` and `users` over `period_days`, from Sentry. A fix PR's errors table and the triage issue are built from it. |
 
 ## `dependency`
 
@@ -84,3 +85,47 @@ An end-of-life release line, which is an `investigate` finding, not part of the 
 Only an `easy` classification can have `kind: "dependency"`, the kind that goes into the PR.
 The validator rejects any other. `eol`, `major` and `blocked` findings are `investigate`, and
 `no_fix` is `external`. `already_fixed` needs no finding.
+
+## An error from Sentry
+
+A `code_fix` from `sentry-errors`, with the `impact` that ranks it:
+
+```json
+{
+  "schema": "finding/1",
+  "project": "example-org/example-app",
+  "produced_by": {
+    "skill": "sentry-errors",
+    "automation_sha": "889bd9b0000000000000000000000000000000aa"
+  },
+  "id": "sentry-2026-11-example-1a2",
+  "fingerprint": "shop/cancel-unknown-order-500",
+  "source": {
+    "process": "sentry-errors",
+    "refs": [
+      "EXAMPLE-1A2"
+    ]
+  },
+  "kind": "code_fix",
+  "title": "Cancelling an unknown order is a 500",
+  "claim": "cancel_order uses Order.objects.get, so an unknown number raises DoesNotExist.",
+  "severity": "important",
+  "evidence": [
+    {
+      "ref": "EXAMPLE-1A2",
+      "note": "DoesNotExist at shop/views.py:90 in cancel_order, 812 events from 97 users in 14 days, production only",
+      "status": "verified"
+    },
+    {
+      "ref": "shop/views.py:90",
+      "note": "Order.objects.get(number=number), with no 404 for an unknown number",
+      "status": "verified"
+    }
+  ],
+  "impact": {
+    "period_days": 14,
+    "events": 812,
+    "users": 97
+  }
+}
+```

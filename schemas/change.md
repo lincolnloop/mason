@@ -83,6 +83,7 @@ itself.
 | Kind | Checked by | `refs` |
 |---|---|---|
 | `alerts_closed` | the Dependabot alerts are closed | alert numbers, as `dependabot#<N>` (required) |
+| `sentry_quiet` | the Sentry issues get no new events after the fix is deployed, for `check_after_days`; the Sentry retrospective checks it | Sentry short ids (required) |
 | `manual` | a person, as described | anything useful |
 
 A signal a machine can check is worth more than `manual`. Use `manual` only when nothing else

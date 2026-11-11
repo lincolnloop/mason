@@ -30,8 +30,8 @@ Style: single quotes, 100-character lines, explicit type hints, ruff for lint an
 - Run a workflow unattended: `bin/unattended <workflow> <project> [--pr N] [--dry-run]`
 - Everything else: `python3 -I bin/artifact --help`
 
-The JSON examples in `schemas/*.md` are run as tests, review examples against the page's `diff`
-block (`tests/test_schema_docs.py`). When a
-schema changes, update its page in the same commit.
+The JSON examples in `schemas/*.md` are run as tests (`tests/test_schema_docs.py`), review
+examples against the page's `diff` block. When a schema changes, update its page in the same
+commit.
 
 Commit messages explain why. The diff shows what.

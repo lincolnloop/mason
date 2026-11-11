@@ -87,6 +87,15 @@ WORKFLOWS = {
         tools=(),
         needs_pr=True,
     ),
+    'sentry-errors': Workflow(
+        prompt='Run the Sentry errors workflow for this project, unattended.',
+        # The project's tests and builds, as for an upgrade. Sentry is read through bin/artifact.
+        tools=('Bash(make *)', 'Bash(npm *)'),
+    ),
+    'sentry-retrospective': Workflow(
+        prompt='Run the Sentry retrospective for this project, unattended.',
+        tools=('Bash(python3 -m unittest *)', 'Bash(ruff *)'),
+    ),
     'code-review-retrospective': Workflow(
         prompt='Run the code review retrospective for this project, unattended.',
         tools=('Bash(python3 -m unittest *)', 'Bash(ruff *)'),

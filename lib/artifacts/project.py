@@ -50,6 +50,25 @@ SECTIONS: dict[str, dict[str, tuple[str, bool]]] = {
         'inline': ('str', True),
     },
     'code-review-retrospective': {'period_days': ('int', True)},
+    'sentry-errors': {
+        'sentry_org': ('str', True),
+        'sentry_project': ('str', True),
+        'sentry_url': ('str', True),
+        'environments': ('list', True),
+        'period_days': ('int', True),
+        # Paths whose stack frames are this project's code; the rest are libraries.
+        'trace_path_prefixes': ('list', True),
+        # Other repositories a fix may belong in, such as infrastructure configuration.
+        'related_repos': ('list', True),
+        'verify': ('list', False),
+        # How long after a fix is merged its errors must stay quiet to count as fixed.
+        'quiet_after_days': ('int', True),
+    },
+    'sentry-retrospective': {
+        'period_days': ('int', True),
+        # Allowed between a merge and its deploy, before an event counts against the fix.
+        'deploy_grace_hours': ('int', True),
+    },
     'dependency-retrospective': {
         'period_days': ('int', True),
         'fix_within_days_critical': ('int', True),
@@ -77,6 +96,16 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     # One consolidated review comment; inline comments only when a project asks for them.
     'code-review': {'knowledge': [], 'inline': 'none'},
     'code-review-retrospective': {'period_days': 30},
+    # The org and project can't be detected: they are set in the file.
+    'sentry-errors': {
+        'sentry_url': 'https://sentry.io',
+        'environments': ['production'],
+        'period_days': 14,
+        'trace_path_prefixes': [],
+        'related_repos': [],
+        'quiet_after_days': 14,
+    },
+    'sentry-retrospective': {'period_days': 30, 'deploy_grace_hours': 24},
     # Starting points, to tune per project: how far back a retrospective looks by default, how
     # fast each severity should be fixed, and how long without a release makes a package stale.
     'dependency-retrospective': {

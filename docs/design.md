@@ -98,6 +98,8 @@ cover.
 | Learn | `dependency-retrospective` | `outcomes` collected from the upgrade PRs, the alert history and the package registries | a report issue; a PR to this repo proposing skill changes | built |
 | Report | a report skill | the same `outcomes` | a summary for engineers or clients | not built |
 | Review | `code-review` | one PR: its diff annotated with coordinates, the previous review, replies since | `review` and one posted review, a `COMMENT` | built |
+| Fix | `sentry-errors` | one environment's unresolved Sentry issues, without personal data | a fix PR for one error group, with `change` and `finding`s embedded; or a triage issue | built |
+| Learn | `sentry-retrospective` | `sentry-outcomes`: whether each fix's errors stopped after the merge | a report issue; a PR to this repo proposing skill changes; proposed project rules | built |
 | Learn | `code-review-retrospective` | `review-outcomes`: what happened to each posted finding | a report issue; a PR to this repo proposing review-skill changes; proposed project rules | built |
 
 The PR is the hand-off between steps. Everything the next step needs is in it, in a form a
@@ -211,6 +213,7 @@ for an example project.
 | Open a retrospective's report issue, or its PR proposing a skill change | Unattended: a person reads the report and merges the PR, or doesn't |
 | Post a review of a PR, as a `COMMENT` | Unattended when asked to review it; interactive, confirm first |
 | Approve or request changes on a PR | Never: a person, or a merge step under a policy |
+| Archive, resolve or assign Sentry issues; fix data | Confirm first; unattended runs list them in a triage issue |
 | Merge | Not the upgrade skill's job: a person, or a separate merge step under the project's policy |
 | Dismiss an alert; change this repo's skills | Person only |
 

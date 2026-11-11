@@ -61,3 +61,27 @@ inline = 'none'
 [code-review-retrospective]
 # How far back a retrospective looks when there is no earlier one to continue from.
 period_days = 30
+
+[sentry-errors]
+# Can't be detected: the Sentry organisation and project slugs. The auth token is never in this
+# file: it is SENTRY_AUTH_TOKEN in the environment of whoever runs the workflow.
+sentry_org = 'example-org'
+sentry_project = 'example-app'
+# For self-hosted Sentry, or a regional host such as https://de.sentry.io.
+sentry_url = 'https://sentry.io'
+# Each run triages one environment at a time, in this order.
+environments = ['production', 'staging']
+# How far back a run looks for unresolved errors.
+period_days = 14
+# Stack frames under these paths are the project's own code; the rest are libraries.
+trace_path_prefixes = ['apps/', 'src/']
+# Repositories a fix may belong in instead, such as infrastructure configuration.
+related_repos = ['example-org/infrastructure']
+verify = ['make test']
+# A fix counts as working when its errors stay quiet this long after it merges.
+quiet_after_days = 14
+
+[sentry-retrospective]
+period_days = 30
+# Time allowed between a merge and its deploy before a new event counts against the fix.
+deploy_grace_hours = 24

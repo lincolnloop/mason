@@ -7,10 +7,19 @@ from ._check import ENVELOPE_FIELDS, SLUG_PATTERN, Checker, check_envelope
 
 SCHEMA = 'finding/1'
 
-# dependency: goes into the upgrade PR. investigate: needs a person or its own PR. external:
-# waiting on someone else, such as an upstream fix. skill_change: a change to this repository's
-# skills, proposed by a retrospective.
-KINDS = ('dependency', 'investigate', 'external', 'skill_change')
+# dependency: goes into the upgrade PR. code_fix: a code change, which goes into a fix PR.
+# data_fix: bad data to correct, by a person. archive: noise to archive or resolve in Sentry, by
+# a person. investigate: needs a person or its own PR. external: waiting on someone else, such
+# as an upstream fix. skill_change: a change to this repository's skills, from a retrospective.
+KINDS = (
+    'dependency',
+    'code_fix',
+    'data_fix',
+    'archive',
+    'investigate',
+    'external',
+    'skill_change',
+)
 SEVERITIES = ('critical', 'important', 'suggestion')
 EVIDENCE_STATUSES = ('verified', 'inferred')
 ECOSYSTEMS = ('pip', 'npm')
@@ -21,7 +30,7 @@ ID_PATTERN = re.compile(r'^[a-z0-9][a-z0-9._-]*$')
 FINGERPRINT_PATTERN = re.compile(r'^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)+$')
 
 FIELDS = ('id', 'fingerprint', 'source', 'kind', 'title', 'claim', 'severity', 'evidence')
-OPTIONAL = ('dependency',)
+OPTIONAL = ('dependency', 'impact')
 
 
 def validate(artifact: Any) -> list[str]:
@@ -59,6 +68,9 @@ def check_finding(checker: Checker, finding: dict[str, Any], path: str) -> None:
         min_items=1,
     )
 
+    if 'impact' in finding:
+        _impact(checker, finding['impact'], f'{path}.impact')
+
     # Any kind may describe a dependency (an EOL line is `investigate`), but only an easy
     # upgrade goes into the upgrade PR.
     dependency = finding.get('dependency')
@@ -83,6 +95,15 @@ def _evidence(checker: Checker, value: Any, path: str) -> None:
         checker.string(value.get('ref'), f'{path}.ref')
         checker.string(value.get('note'), f'{path}.note')
         checker.choice(value.get('status'), f'{path}.status', EVIDENCE_STATUSES)
+
+
+def _impact(checker: Checker, value: Any, path: str) -> None:
+    """How much it happens: events and users over a period, to rank findings by."""
+    if checker.object(value, path, ('period_days',), ('events', 'users')):
+        checker.integer(value.get('period_days'), f'{path}.period_days', minimum=1)
+        for key in ('events', 'users'):
+            if key in value:
+                checker.integer(value[key], f'{path}.{key}', minimum=0)
 
 
 def _dependency(checker: Checker, value: Any, path: str) -> None:

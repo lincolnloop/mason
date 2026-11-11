@@ -23,6 +23,8 @@ from . import (
     review_context,
     review_outcomes,
     run,
+    sentry,
+    sentry_outcomes,
     validate,
 )
 
@@ -97,6 +99,58 @@ def main(argv: list[str] | None = None) -> int:
     )
     cmd.add_argument('project', type=Path, help='project root')
     cmd.add_argument('-o', '--output', type=Path, required=True)
+
+    cmd = commands.add_parser(
+        'open-findings',
+        help='fingerprints of the findings already in open automation PRs and issues',
+    )
+    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('-o', '--output', type=Path)
+
+    cmd = commands.add_parser(
+        'sentry-issues',
+        help="a project's unresolved Sentry issues in one environment, without personal data",
+    )
+    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('--environment', help='default: the first in [sentry-errors] environments')
+    cmd.add_argument(
+        '--details', type=int, default=25, help='fetch releases for the N most frequent'
+    )
+    cmd.add_argument('-o', '--output', type=Path, required=True)
+
+    cmd = commands.add_parser(
+        'sentry-event', help="a Sentry issue's latest event, cut down to what explains the error"
+    )
+    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('issue', help='the issue id, or its short id (e.g. EXAMPLE-1A2)')
+    cmd.add_argument('--environment')
+    cmd.add_argument('-o', '--output', type=Path, required=True)
+
+    cmd = commands.add_parser(
+        'render-triage', help='the issue a sentry-errors run opens for findings with no fix'
+    )
+    cmd.add_argument('--environment', required=True)
+    cmd.add_argument('--run', type=Path, required=True, help="the run's run.json")
+    cmd.add_argument('--findings', type=Path, nargs='+', required=True)
+    cmd.add_argument('-o', '--output', type=Path)
+
+    cmd = commands.add_parser(
+        'collect-sentry-outcomes', help='whether the Sentry fixes worked, as sentry-outcomes/1'
+    )
+    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('--run', type=Path, required=True, help="the collecting run's run.json")
+    cmd.add_argument(
+        '--since', help='start of the period (ISO date or time); default period_days ago'
+    )
+    cmd.add_argument('-o', '--output', type=Path)
+
+    cmd = commands.add_parser(
+        'render-sentry-retrospective', help='render Sentry outcomes and findings as a report'
+    )
+    cmd.add_argument('outcomes', type=Path, help='collect-sentry-outcomes output')
+    cmd.add_argument('--run', type=Path, required=True, help="the run's run.json")
+    cmd.add_argument('--findings', type=Path, nargs='*', default=[], help='the findings files')
+    cmd.add_argument('-o', '--output', type=Path)
 
     cmd = commands.add_parser(
         'render-stopped', help='the comment a run leaves on the open PR it stopped for'
@@ -184,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if output is not None:
         if getattr(args, 'output', None):
+            args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(output, encoding='utf-8')
         else:
             sys.stdout.write(output)
@@ -261,6 +316,115 @@ def _render_review_retrospective(args: argparse.Namespace) -> str:
         raise Refused(str(exc)) from exc
 
 
+def _sentry_settings(project_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    try:
+        config = project.load(project_dir, 'sentry-errors')
+    except project.ConfigError as exc:
+        raise Refused(str(exc)) from exc
+    return config, config['sentry-errors']
+
+
+def _open_findings(args: argparse.Namespace) -> str:
+    try:
+        repo = project.load(args.project)['repo']['name']
+        return json.dumps(collect.open_findings(repo), indent=2) + '\n'
+    except (project.ConfigError, collect.CollectError, ValueError) as exc:
+        raise Refused(str(exc)) from exc
+
+
+def _sentry_issues(args: argparse.Namespace) -> None:
+    _, settings = _sentry_settings(args.project)
+    environment = args.environment or settings['environments'][0]
+    client = sentry.client_from_config(settings)
+    try:
+        issues = client.unresolved(environment, f'{settings["period_days"]}d')
+        for index, issue in enumerate(issues[: args.details]):
+            issues[index] = {**issue, **client.issue(issue['id'], environment)}
+    except (sentry.SentryError, KeyError, ValueError) as exc:
+        raise Refused(str(exc)) from exc
+    result = {
+        'environment': environment,
+        'period_days': settings['period_days'],
+        'fetched_at': f'{datetime.now(UTC):%Y-%m-%dT%H:%M:%SZ}',
+        'issues': issues,
+    }
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(
+        json.dumps(result, indent=2, ensure_ascii=False) + '\n', encoding='utf-8'
+    )
+    print(
+        f'{len(issues)} unresolved issues in {environment} saved to {args.output}', file=sys.stderr
+    )
+
+
+def _sentry_event(args: argparse.Namespace) -> None:
+    _, settings = _sentry_settings(args.project)
+    client = sentry.client_from_config(settings)
+    try:
+        issue_id = args.issue if args.issue.isdigit() else client.by_short_id(args.issue)
+        event = client.latest_event(issue_id, args.environment)
+    except (sentry.SentryError, KeyError, ValueError) as exc:
+        raise Refused(str(exc)) from exc
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(event, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    print(f'latest event of {args.issue} saved to {args.output}', file=sys.stderr)
+
+
+def _render_triage(args: argparse.Namespace) -> str:
+    (record,) = _load(args.run, schema='run/1')
+    findings = [f for path in args.findings for f in _load(path, schema='finding/1')]
+    try:
+        return render.triage_body(args.environment, findings, record)
+    except ValueError as exc:
+        raise Refused(str(exc)) from exc
+
+
+def _collect_sentry_outcomes(args: argparse.Namespace) -> str:
+    (record,) = _load(args.run, schema='run/1')
+    try:
+        resolved = project.resolve(args.project)
+        project.require(resolved, 'sentry-errors')
+        project.require(resolved, 'sentry-retrospective')
+    except project.ConfigError as exc:
+        raise Refused(str(exc)) from exc
+    config = resolved.config
+    settings, retro = config['sentry-errors'], config['sentry-retrospective']
+    since, until = _period(args.since, retro['period_days'])
+    policy = {
+        'quiet_after_days': settings['quiet_after_days'],
+        'deploy_grace_hours': retro['deploy_grace_hours'],
+        'stale_pr_after_days': config['limits']['stale_after_days'],
+    }
+    try:
+        result = sentry_outcomes.collect(
+            config['repo']['name'],
+            record,
+            since,
+            until,
+            policy,
+            settings,
+            sentry.client_from_config(settings),
+        )
+    except (collect.CollectError, sentry.SentryError, ValueError, KeyError) as exc:
+        raise Refused(str(exc)) from exc
+    errors = validate(result)
+    if errors:
+        raise Refused('\n'.join(['the collected outcomes are invalid:', *errors]))
+    return json.dumps(result, indent=2, ensure_ascii=False) + '\n'
+
+
+def _render_sentry_retrospective(args: argparse.Namespace) -> str:
+    (collected,) = _load(args.outcomes, schema='sentry-outcomes/1')
+    (record,) = _load(args.run, schema='run/1')
+    if collected['run'] != record['id']:
+        raise Refused(f'the outcomes are from run {collected["run"]!r}, not {record["id"]!r}')
+    findings = [f for path in args.findings for f in _load(path, schema='finding/1')]
+    try:
+        return render.sentry_retrospective_body(collected, findings, record)
+    except ValueError as exc:
+        raise Refused(str(exc)) from exc
+
+
 def _period(since_arg: str | None, period_days: int) -> tuple[datetime, datetime]:
     until = datetime.now(UTC)
     since = until - timedelta(days=period_days)
@@ -334,6 +498,7 @@ def _alerts(args: argparse.Namespace) -> None:
     except (collect.CollectError, ValueError) as exc:
         raise Refused(str(exc)) from exc
     # Saved as GitHub returned it: every later step reads this file, so nothing is dropped.
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(text, encoding='utf-8')
     print(f'{count} open alerts saved to {args.output}', file=sys.stderr)
 
@@ -491,6 +656,12 @@ COMMANDS = {
     'render-change': _render_change,
     'render-stopped': _render_stopped,
     'annotate-diff': _annotate,
+    'open-findings': _open_findings,
+    'sentry-issues': _sentry_issues,
+    'sentry-event': _sentry_event,
+    'render-triage': _render_triage,
+    'collect-sentry-outcomes': _collect_sentry_outcomes,
+    'render-sentry-retrospective': _render_sentry_retrospective,
     'review-context': _review_context,
     'render-review': _render_review,
     'collect-review-outcomes': _collect_review_outcomes,

@@ -35,6 +35,24 @@ FAILED = {'FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STAR
 COMMENT_LIMIT = 2000
 
 FIELDS = ('run', 'period', 'policy', 'prs', 'stopped_runs', 'reverts', 'alerts', 'packages')
+# The fields of one PR's record, shared with the other workflows' outcomes.
+PR_FIELDS = (
+    'number',
+    'url',
+    'title',
+    'state',
+    'draft',
+    'created_at',
+    'decided_at',
+    'days_open',
+    'stale',
+    'run',
+    'edited',
+    'ci',
+    'alerts_closed',
+    'findings',
+    'comments',
+)
 
 
 # --- Validation --------------------------------------------------------------------------------
@@ -98,24 +116,7 @@ def validate(artifact: Any) -> list[str]:
 
 
 def _check_pr(checker: Checker, value: Any, path: str) -> None:
-    fields = (
-        'number',
-        'url',
-        'title',
-        'state',
-        'draft',
-        'created_at',
-        'decided_at',
-        'days_open',
-        'stale',
-        'run',
-        'edited',
-        'ci',
-        'alerts_closed',
-        'findings',
-        'comments',
-    )
-    if checker.object(value, path, fields):
+    if checker.object(value, path, PR_FIELDS):
         checker.integer(value.get('number'), f'{path}.number', minimum=1)
         checker.choice(value.get('state'), f'{path}.state', PR_STATES)
         checker.timestamp(value.get('created_at'), f'{path}.created_at')
@@ -159,7 +160,7 @@ def build(
     packages: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """The outcomes artifact, from what `collect` fetched. Pure: no network, no clock."""
-    prs = [pr for pr in (_pr(raw, until, policy) for raw in raw_prs) if _in_period(pr, since)]
+    prs = [pr for pr in (pr_record(raw, until, policy) for raw in raw_prs) if in_period(pr, since)]
     merged_closes = {n for pr in prs if pr['state'] == 'merged' for n in pr['alerts_closed']}
     return {
         'schema': SCHEMA,
@@ -179,7 +180,7 @@ def build(
     }
 
 
-def _pr(raw: dict[str, Any], until: datetime, policy: dict[str, Any]) -> dict[str, Any]:
+def pr_record(raw: dict[str, Any], until: datetime, policy: dict[str, Any]) -> dict[str, Any]:
     artifacts = _embedded(raw.get('body') or '')
     change = next((a for a in artifacts if a.get('schema') == 'change/1'), None)
     run = next((a for a in artifacts if a.get('schema') == 'run/1'), None)
@@ -244,7 +245,7 @@ def _said(raw: dict[str, Any]) -> list[dict[str, Any]]:
     return sorted(said, key=lambda item: item['created_at'])
 
 
-def _in_period(pr: dict[str, Any], since: datetime) -> bool:
+def in_period(pr: dict[str, Any], since: datetime) -> bool:
     if pr['state'] == 'open':
         return True
     return _parse(pr['created_at']) >= since or _parse(pr['decided_at']) >= since

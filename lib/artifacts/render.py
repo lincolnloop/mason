@@ -173,6 +173,9 @@ def change_body(
         refs = ', '.join(finding['source']['refs'])
         lines.append(f'- **{finding["title"]}** ({finding["severity"]}; {refs})')
 
+    errors = [f for f in findings if f.get('impact')]
+    if errors:
+        lines += ['', *_errors_table(errors)]
     if change.get('dependencies'):
         lines += ['', *_dependency_table(change['dependencies'])]
     if change.get('alerts'):
@@ -264,10 +267,37 @@ def _alert_table(alerts: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _errors_table(findings: list[dict[str, Any]]) -> list[str]:
+    """How often the errors a change addresses happen, from the findings' impact."""
+    lines = [
+        '## Errors addressed',
+        '',
+        '| Error | Issues | Events | Users |',
+        '|---|---|---:|---:|',
+    ]
+    for finding in findings:
+        impact = finding['impact']
+        lines.append(
+            f'| {_cell(finding["title"])} | {", ".join(finding["source"]["refs"])} '
+            f'| {impact.get("events", "–")} | {impact.get("users", "–")} |'
+        )
+    days = {f['impact']['period_days'] for f in findings}
+    if len(days) == 1:
+        lines += ['', f'Events and users over the last {days.pop()} days.']
+    return lines
+
+
 def _signal(project: str, signal: dict[str, Any]) -> list[str]:
     days = signal['check_after_days']
     when = 'at merge' if days == 0 else f'{days} day{"" if days == 1 else "s"} after merge'
-    # Nothing checks the signal automatically yet, so the body says so, and gives the command
+    if signal['kind'] == 'sentry_quiet':
+        return [
+            '## How we will know it worked',
+            '',
+            f'{signal["description"].strip().rstrip(".")}. The Sentry retrospective checks this '
+            f"{when}, from each issue's last event: {", ".join(signal["refs"])}.",
+        ]
+    # Nothing checks this signal automatically yet, so the body says so, and gives the command
     # where there is one.
     lines = [
         '## How we will know it worked',
@@ -302,7 +332,7 @@ def _left_out(findings: list[dict[str, Any]]) -> list[str]:
         groups.setdefault(key, []).append(finding)
 
     def size(group: list[dict[str, Any]]) -> int:
-        return sum(_alert_count(f) for f in group)
+        return sum(_measure(f)[0] for f in group)
 
     lines: list[str] = []
     order = [k for k in ('untracked', 'other') if k in groups]
@@ -310,16 +340,17 @@ def _left_out(findings: list[dict[str, Any]]) -> list[str]:
         (k for k in groups if k not in ('untracked', 'other')), key=lambda k: -size(groups[k])
     )
     for key in order:
-        group = sorted(groups[key], key=lambda f: (-_alert_count(f), f['title']))
+        group = sorted(groups[key], key=lambda f: (-_measure(f)[0], f['title']))
+        noun = _measure(group[0])[1]
         heading = {
             'untracked': 'Not tracked anywhere yet',
             'other': 'Left out for the reason given',
         }.get(key) or f'Tracked in {_link(key)}'
-        lines += [f'**{heading}** ({_count(size(group), "alert")}):', '']
+        lines += [f'**{heading}** ({_count(size(group), noun)}):', '']
         for finding in group:
             dependency = finding.get('dependency') or {}
             what = dependency.get('classification', finding['kind']).replace('_', ' ')
-            note = f'{_count(_alert_count(finding), "alert")}, {what}'
+            note = f'{_count(*_measure(finding))}, {what}'
             line = f'- **{finding["title"]}** ({note})'
             if key == 'other':
                 line += f'. {finding["claim"].strip()}'
@@ -328,8 +359,12 @@ def _left_out(findings: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-def _alert_count(finding: dict[str, Any]) -> int:
-    return sum(1 for ref in finding['source']['refs'] if ref.startswith('dependabot#'))
+def _measure(finding: dict[str, Any]) -> tuple[int, str]:
+    """How big a finding is: its Dependabot alerts, or for an error its events."""
+    alerts = sum(1 for ref in finding['source']['refs'] if ref.startswith('dependabot#'))
+    if alerts or not finding.get('impact'):
+        return alerts, 'alert'
+    return finding['impact'].get('events', 0), 'event'
 
 
 def _link(url: str) -> str:
@@ -544,6 +579,104 @@ def review_retrospective_body(
     }
     for artifact in (compact, *findings):
         label = 'review-outcomes.json' if artifact is compact else f'finding {artifact["id"]}'
+        lines += [embed(artifact, label), '']
+    lines += [embed({**run, 'outcome': 'issue_opened'}, 'run.json'), '']
+    return _within_limit('\n'.join(lines), 'issue body')
+
+
+TRIAGE_GROUPS = (
+    ('data_fix', 'Data to fix'),
+    ('investigate', 'To investigate'),
+    ('archive', 'To archive or resolve in Sentry'),
+    ('external', 'Waiting on others'),
+    ('code_fix', 'Code fixes not made in this run'),
+)
+
+
+def triage_title(environment: str, run: dict[str, Any]) -> str:
+    return f'Sentry triage ({environment}): {run["started_at"][:10]}'
+
+
+def triage_body(environment: str, findings: list[dict[str, Any]], run: dict[str, Any]) -> str:
+    """The issue a sentry-errors run opens when it has findings for a person but no fix to make."""
+    lines = [
+        f'**{triage_title(environment, run)}.**',
+        '',
+        f'{_count(len(findings), "finding")} that need a person, from the unresolved errors in '
+        f'{environment}. Errors already in an open PR or triage issue are left out.',
+    ]
+    for kind, heading in TRIAGE_GROUPS:
+        group = sorted((f for f in findings if f['kind'] == kind), key=lambda f: -_measure(f)[0])
+        if not group:
+            continue
+        lines += ['', f'## {heading}', '']
+        for finding in group:
+            refs = ', '.join(finding['source']['refs'])
+            impact = finding.get('impact') or {}
+            weight = (
+                f'{impact.get("events", 0)} events, {impact.get("users", 0)} users'
+                if impact
+                else finding['severity']
+            )
+            lines.append(f'- **{finding["title"]}** ({refs}; {weight}). {finding["claim"].strip()}')
+    lines += ['', f'<sub>Opened by {_run_line(run)}.</sub>', '']
+    for finding in findings:
+        lines += [embed(finding, f'finding {finding["id"]}'), '']
+    lines += [embed({**run, 'outcome': 'issue_opened'}, 'run.json'), '']
+    return _within_limit('\n'.join(lines), 'issue body')
+
+
+def sentry_retrospective_title(outcomes: dict[str, Any]) -> str:
+    period = outcomes['period']
+    return f'Sentry retrospective: {period["since"][:10]} to {period["until"][:10]}'
+
+
+def sentry_retrospective_body(
+    outcomes: dict[str, Any], findings: list[dict[str, Any]], run: dict[str, Any]
+) -> str:
+    """The report issue for a Sentry retrospective: did the fixes work, what is still open."""
+    prs, triage = outcomes['prs'], outcomes['triage_issues']
+    signals = Counter(pr['signal']['status'] for pr in prs)
+    lines = [
+        f'**{sentry_retrospective_title(outcomes)}.**',
+        '',
+        f'{_count(len(prs), "fix PR")}: {signals["met"]} working (quiet for '
+        f'{outcomes["policy"]["quiet_after_days"]} days after merge), {signals["not_met"]} not '
+        f'working (errors after the fix was deployed), {signals["pending"]} still being watched, '
+        f'{signals["not_applicable"]} not merged. {_count(len(triage), "triage issue")}, '
+        f'{sum(1 for t in triage if t["state"] == "open")} still open.',
+        '',
+        '## Fix PRs',
+        '',
+    ]
+    if prs:
+        lines += [
+            '| PR | Outcome | Issues | Signal | Last event after merge |',
+            '|---|---|---|---|---|',
+        ]
+        for pr in prs:
+            issues = pr['signal']['issues']
+            late = [i['short_id'] for i in issues if i['after_fix']]
+            lines.append(
+                f'| #{pr["number"]} | {_pr_outcome(pr)} | {", ".join(i["short_id"] for i in issues) or "–"} '
+                f'| {pr["signal"]["status"].replace("_", " ")} | {", ".join(late) or "–"} |'
+            )
+    else:
+        lines.append('No fix PRs in this period.')
+    lines += ['', '## Unresolved now', '', '| Environment | Unresolved issues |', '|---|---:|']
+    lines += [f'| {env} | {count} |' for env, count in outcomes['unresolved_now'].items()]
+    if triage:
+        lines += ['', '## Triage issues', '']
+        for issue in triage:
+            lines.append(
+                f'- #{issue["number"]} ({issue["state"]}, {_count(len(issue["findings"]), "finding")}, '
+                f'opened {issue["created_at"][:10]})'
+            )
+    lines += _findings_section(findings)
+    lines += ['', f'<sub>Reported by {_run_line(run)}.</sub>', '']
+    compact = {**outcomes, 'prs': [{**pr, 'comments': len(pr['comments'])} for pr in prs]}
+    for artifact in (compact, *findings):
+        label = 'sentry-outcomes.json' if artifact is compact else f'finding {artifact["id"]}'
         lines += [embed(artifact, label), '']
     lines += [embed({**run, 'outcome': 'issue_opened'}, 'run.json'), '']
     return _within_limit('\n'.join(lines), 'issue body')

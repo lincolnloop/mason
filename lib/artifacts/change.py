@@ -11,8 +11,9 @@ SCHEMA = 'change/1'
 
 # ci: not run here; CI runs it on the pull request, and whoever merges checks the result.
 CHECK_RESULTS = ('pass', 'ci', 'skipped')
-# alerts_closed: the listed Dependabot alerts close. manual: a person checks, as described.
-SIGNAL_KINDS = ('alerts_closed', 'manual')
+# alerts_closed: the listed Dependabot alerts close. sentry_quiet: the listed Sentry issues get
+# no new events after the change is deployed. manual: a person checks, as described.
+SIGNAL_KINDS = ('alerts_closed', 'sentry_quiet', 'manual')
 BRANCH_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/-]*$')
 
 FIELDS = (
@@ -108,7 +109,7 @@ def _signal(checker: Checker, value: Any, path: str) -> None:
     kind = value.get('kind')
     checker.choice(kind, f'{path}.kind', SIGNAL_KINDS)
     checker.string_array(value.get('refs'), f'{path}.refs')
-    if kind == 'alerts_closed' and value.get('refs') == []:
+    if kind in ('alerts_closed', 'sentry_quiet') and value.get('refs') == []:
         checker.error(f'{path}.refs', f'must name what to check when kind is {kind}')
     checker.integer(
         value.get('check_after_days'), f'{path}.check_after_days', minimum=0, maximum=90

@@ -4,7 +4,8 @@
 - `change`: the pull request it opens.
 - `review`: a review of a pull request.
 - `run`: who started a run, where, and how it ended.
-- `outcomes`, `review-outcomes`: what happened afterwards, for a retrospective.
+- `outcomes`, `review-outcomes`, `sentry-outcomes`: what happened afterwards, for a
+  retrospective.
 
 Each module has `SCHEMA` (the value of the artifact's `schema` field) and `validate(artifact)`,
 which returns a list of errors, empty when the artifact is valid. A review is validated against
@@ -13,7 +14,7 @@ the PR's unified diff as well, to check its locations.
 
 from typing import Any
 
-from . import change, finding, outcomes, review, review_outcomes, run
+from . import change, finding, outcomes, review, review_outcomes, run, sentry_outcomes
 
 VALIDATORS = {
     finding.SCHEMA: finding.validate,
@@ -21,6 +22,7 @@ VALIDATORS = {
     run.SCHEMA: run.validate,
     outcomes.SCHEMA: outcomes.validate,
     review_outcomes.SCHEMA: review_outcomes.validate,
+    sentry_outcomes.SCHEMA: sentry_outcomes.validate,
 }
 
 

@@ -30,7 +30,7 @@ class SchemaDocTests(unittest.TestCase):
                     artifact = json.loads(body)
                     diff_text = diffs[0] if diffs and artifact.get('schema') == 'review/1' else None
                     self.assertEqual(validate(artifact, diff_text), [])
-        self.assertGreaterEqual(examples, 7)
+        self.assertGreaterEqual(examples, 9)
 
     def test_every_schema_has_a_page(self) -> None:
         from artifacts import VALIDATORS, review

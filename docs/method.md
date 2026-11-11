@@ -99,6 +99,43 @@ why.
   skill. A correction that is this project's choice becomes a rule in the project's own
   knowledge, so the shared skill doesn't absorb one project's conventions.
 
+## `sentry-errors`
+
+- **Filter by environment first.** A Sentry issue groups events from every environment, and an
+  error staging sees is a different matter from one production sees.
+- **Check the release for every issue.** Is its commit on the main branch (errors from branch
+  deploys aren't main-branch bugs)? Has the code changed since? Is a fix already merged and
+  waiting for a deploy? Watch for deploy skew.
+- **Grouping signals, strongest first:** the same mechanism in different places; the same
+  message once the variable parts are removed; one failure logged twice; the same external
+  host; the same release first seen (framework upgrades re-fingerprint existing errors); the
+  same culprit. Performance issues group by the repeated query, not by URL.
+- **Period counts are not lifetime counts,** and a performance issue's count is a sample once
+  the span quota runs out.
+- **Answer "how did this get through?"** for each group, naming the step that missed it. That
+  is how a fix to the process gets proposed, not just a fix to the code.
+- **A test that reproduces the error, then the fix.** A fix without one can't be told apart
+  from a fix that silences the symptom.
+- **Diagnostics gaps are worth fixing at the source:** f-string log messages that fragment
+  grouping, an `ERROR` on every retry, retrying a 401 or 403, `RetryError` without
+  `reraise=True`, a key fact truncated away, a missing `exc_info`.
+- **Archive modes:** `untilEscalating` for noise; `forever` only for a confirmed false positive.
+  Resolving is cheap, because Sentry reopens a regression. All of these are a person's.
+- **Personal data stays in Sentry.** The scripts strip it before the agent sees an event, and
+  nothing from an event goes into GitHub beyond what explains the bug.
+- **One run, one PR, but not one open PR.** Fixes for different groups don't overlap, so they
+  may be open together; a group already in an open PR or triage issue is never reported twice.
+
+## `sentry-retrospective`
+
+- **The signal is the point.** A fix predicts its errors will stop. When they don't, the
+  diagnosis was wrong somewhere, and that is the most useful thing to learn from.
+- **Not deployed is not failed.** An event from a release older than the fix says nothing about
+  the fix.
+- **Fix the class, not the instance.** The same kind of error in different places is a missing
+  rule for writing code, a test pattern, or a review check, and the project's own knowledge is
+  where it goes.
+
 ## Across all workflows
 
 - **Autonomy levels:** unattended, confirm first, or person only (`design.md` §6). A PR's review

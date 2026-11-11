@@ -9,6 +9,8 @@ which steps a person does.
 | `dependency-upgrades` | Dependabot alerts | one PR, one commit per package, with derived package and alert tables. It never merges: the PR is the hand-off |
 | `code-review` | a pull request | one consolidated review, posted as a comment with its findings embedded; follow-ups report what happened to each earlier finding |
 | `code-review-retrospective` | what happened to the review findings over a period | a report issue: which categories people act on; a PR to this repo when the review skill should change; proposed rules for the project |
+| `sentry-errors` | one environment's unresolved Sentry issues | one PR per run fixing one error group, with a regression test; a triage issue for what needs a person |
+| `sentry-retrospective` | whether the Sentry fixes made their errors stop | a report issue: fixes that didn't work and why, recurring classes of error, rules for the project; a PR to this repo when the skill should change |
 | `dependency-retrospective` | what happened to the upgrade PRs and alerts over a period | a report issue: time to fix against targets, where the time went, stale or abandoned packages; and a PR to this repo when the upgrade skill should change |
 
 ## Set up
@@ -20,6 +22,9 @@ You need, on the machine that runs the workflow:
   Check with `gh api 'repos/<owner>/<repo>/dependabot/alerts?per_page=1'`.
 - Whatever the project needs to recompile its requirements and build: pip-tools for
   pip-compile files, npm for lockfiles.
+- For the Sentry workflows: a Sentry auth token with the `project:read`, `event:read` and
+  `org:read` scopes, as `SENTRY_AUTH_TOKEN`, and the project's `[sentry-errors]` section
+  (`sentry_org` and `sentry_project`, which can't be detected).
 
 Then:
 
@@ -51,8 +56,9 @@ cd path/to/<project>
 claude --add-dir path/to/mason
 ```
 
-Then ask for "run the dependency upgrades", "review PR #42", or a retrospective ("run the
-dependency retrospective", "run the code review retrospective"). The upgrade run tells you what
+Then ask for "run the dependency upgrades", "review PR #42", "fix the Sentry errors", or a
+retrospective ("run the dependency retrospective", "run the code review retrospective", "run
+the Sentry retrospective"). The upgrade run tells you what
 it detected, asks before anything
 that needs confirmation (running tests that can't share a machine, opening issues), and ends
 with the PR link and a short report. Each run's files (alerts, findings, the PR body, a
@@ -138,8 +144,9 @@ lib/artifacts/              validators, renderers, embedding, config, locking, t
                             readers, outcome collection, and the unattended runner
 bin/artifact                the command line skills call (`--help` lists them all): config,
                             run-start, lock, validate, the collectors (alerts, deps-diff,
-                            alerts-closed, review-context, collect-outcomes,
-                            collect-review-outcomes), the renderers, annotate-diff, extract
+                            alerts-closed, review-context, sentry-issues, sentry-event,
+                            open-findings, collect-*-outcomes), the renderers, annotate-diff,
+                            extract
 bin/unattended              start a workflow headless, for schedulers and other agents
 tests/                      stdlib unittest; the schema pages' examples are tests too
 docs/design.md              principles, steps and hand-offs, autonomy, distribution
