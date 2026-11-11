@@ -339,7 +339,7 @@ def _sentry_issues(args: argparse.Namespace) -> None:
     try:
         issues = client.unresolved(environment, f'{settings["period_days"]}d')
         for index, issue in enumerate(issues[: args.details]):
-            issues[index] = {**issue, **client.issue(issue['id'], environment)}
+            issues[index] = sentry.with_detail(issue, client.issue(issue['id'], environment))
     except (sentry.SentryError, KeyError, ValueError) as exc:
         raise Refused(str(exc)) from exc
     result = {

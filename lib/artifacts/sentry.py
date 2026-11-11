@@ -117,7 +117,23 @@ def issue_summary(issue: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def with_detail(summary: dict[str, Any], detail: dict[str, Any]) -> dict[str, Any]:
+    """A list summary with an issue's detail added. The summary's `events` and `users` count the
+    queried period; the detail's count the issue's whole life, so they are kept apart, as
+    `lifetime_events` and `lifetime_users`, rather than overwriting the period's."""
+    return {
+        **summary,
+        'status': detail['status'],
+        'substatus': detail['substatus'],
+        'first_release': detail['first_release'],
+        'last_release': detail['last_release'],
+        'lifetime_events': detail['events'],
+        'lifetime_users': detail['users'],
+    }
+
+
 def issue_detail(issue: dict[str, Any]) -> dict[str, Any]:
+    """An issue from the detail endpoint. Its `events` and `users` are lifetime counts."""
     first, last = issue.get('firstRelease') or {}, issue.get('lastRelease') or {}
     return {
         **issue_summary(issue),

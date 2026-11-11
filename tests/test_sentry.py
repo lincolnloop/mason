@@ -161,6 +161,23 @@ class ClientTests(unittest.TestCase):
         )
         self.assertEqual(summary['tags'], {'release': '5f3a2c1', 'environment': 'production'})
 
+    def test_detail_keeps_the_periods_counts(self) -> None:
+        summary = sentry.issue_summary({**ISSUE, 'count': '703', 'userCount': 104})
+        detail = sentry.issue_detail(
+            {
+                **ISSUE,
+                'count': '14386',
+                'userCount': 2100,
+                'status': 'unresolved',
+                'substatus': 'ongoing',
+                'firstRelease': {'version': 'e441f1f'},
+            }
+        )
+        merged = sentry.with_detail(summary, detail)
+        self.assertEqual((merged['events'], merged['users']), (703, 104))
+        self.assertEqual((merged['lifetime_events'], merged['lifetime_users']), (14386, 2100))
+        self.assertEqual((merged['first_release'], merged['substatus']), ('e441f1f', 'ongoing'))
+
     def test_a_missing_token_is_a_clear_error(self) -> None:
         import os
 

@@ -85,8 +85,10 @@ artifact sentry-event $PROJECT <short id> --environment <environment> -o $RUN/ev
 - **Has the code changed since?** `git -C $PROJECT log --oneline <release>..origin/<main_branch> -- <file>`.
   A fix may already be merged and waiting for a deploy. Watch for deploy skew: an error from a
   release older than what is deployed now.
-- **Counts:** `events` and `users` are for the period, not the issue's lifetime. A performance
-  issue's count is a sample when the span quota runs out, so it says little about frequency.
+- **Counts:** `events` and `users` are for the period; `lifetime_events` and `lifetime_users`
+  (for the most frequent issues) are for the issue's whole life. Rank and report by the period's.
+  A performance issue's count is a sample when the span quota runs out, so it says little about
+  frequency.
 
 ## Step 4: Group by root cause
 
