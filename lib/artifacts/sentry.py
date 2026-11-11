@@ -62,12 +62,17 @@ class Client:
 
     def unresolved(self, environment: str, period: str, limit: int = 300) -> list[dict[str, Any]]:
         """Unresolved issues seen in `environment` within `period` (e.g. '14d'), most frequent
-        first, as summaries."""
+        first, as summaries.
+
+        This uses the organisation's issues endpoint, which applies the period: it lists only
+        issues with events in it, and counts only those events. The older project endpoint
+        does neither: it lists issues last seen months ago, with their lifetime counts.
+        """
         found: list[dict[str, Any]] = []
-        url_path = f'/projects/{self.org}/{self.project}/issues/'
+        url_path = f'/organizations/{self.org}/issues/'
         data, link = self._get(
             url_path,
-            query='is:unresolved',
+            query=f'is:unresolved project:{self.project}',
             environment=environment,
             statsPeriod=period,
             sort='freq',
@@ -99,7 +104,10 @@ class Client:
 
 
 def issue_summary(issue: dict[str, Any]) -> dict[str, Any]:
+    """An issue from a list. `events` and `users` count the queried period; `lifetime_events`
+    and `lifetime_users` the issue's whole life, when the response has them."""
     metadata = issue.get('metadata') or {}
+    lifetime = issue.get('lifetime') or {}
     return {
         'id': str(issue['id']),
         'short_id': issue['shortId'],
@@ -111,6 +119,8 @@ def issue_summary(issue: dict[str, Any]) -> dict[str, Any]:
         'exception_type': metadata.get('type'),
         'events': int(issue.get('count') or 0),
         'users': int(issue.get('userCount') or 0),
+        'lifetime_events': int(lifetime['count']) if lifetime.get('count') is not None else None,
+        'lifetime_users': lifetime.get('userCount'),
         'first_seen': issue.get('firstSeen'),
         'last_seen': issue.get('lastSeen'),
         'permalink': issue.get('permalink'),
@@ -127,8 +137,8 @@ def with_detail(summary: dict[str, Any], detail: dict[str, Any]) -> dict[str, An
         'substatus': detail['substatus'],
         'first_release': detail['first_release'],
         'last_release': detail['last_release'],
-        'lifetime_events': detail['events'],
-        'lifetime_users': detail['users'],
+        'lifetime_events': summary.get('lifetime_events') or detail['events'],
+        'lifetime_users': summary.get('lifetime_users') or detail['users'],
     }
 
 
@@ -176,7 +186,32 @@ def event_summary(event: dict[str, Any]) -> dict[str, Any]:
         'tags': tags,
         'message': scrub(event.get('message') or None),
         'exceptions': exceptions,
+        'performance': _performance(event.get('occurrence')),
     }
+
+
+def _performance(occurrence: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A performance issue's evidence (an N+1, a slow query): what repeats, how often, and
+    where. Queries come as templates with placeholders, and are scrubbed like everything else."""
+    if not occurrence:
+        return None
+    data = occurrence.get('evidenceData') or {}
+    return {
+        'type': occurrence.get('type'),
+        'transaction': data.get('transactionName'),
+        'repeated': data.get('numberRepeatingSpans'),
+        'parent': scrub(_first(data.get('parentSpan')), 300),
+        'evidence': [
+            {'name': item.get('name'), 'value': scrub(item.get('value'), 1500)}
+            for item in occurrence.get('evidenceDisplay') or []
+        ],
+    }
+
+
+def _first(value: Any) -> str | None:
+    if isinstance(value, list):
+        return str(value[0]) if value else None
+    return None if value is None else str(value)
 
 
 def _context_line(frame: dict[str, Any]) -> str | None:

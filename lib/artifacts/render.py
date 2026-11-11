@@ -334,19 +334,30 @@ def _left_out(findings: list[dict[str, Any]]) -> list[str]:
     def size(group: list[dict[str, Any]]) -> int:
         return sum(_measure(f)[0] for f in group)
 
+    def totals(group: list[dict[str, Any]]) -> str:
+        by_noun: dict[str, int] = {}
+        for finding in group:
+            count, noun = _measure(finding)
+            by_noun[noun] = by_noun.get(noun, 0) + count
+        return ', '.join(_count(count, noun) for noun, count in by_noun.items())
+
     lines: list[str] = []
     order = [k for k in ('untracked', 'other') if k in groups]
     order += sorted(
         (k for k in groups if k not in ('untracked', 'other')), key=lambda k: -size(groups[k])
     )
     for key in order:
-        group = sorted(groups[key], key=lambda f: (-_measure(f)[0], f['title']))
-        noun = _measure(group[0])[1]
+        # Most severe first, then the biggest: a small important finding outranks a large nit.
+        group = sorted(
+            groups[key],
+            key=lambda f: (SEVERITY_RANK.get(f['severity'], 3), -_measure(f)[0], f['title']),
+        )
+
         heading = {
             'untracked': 'Not tracked anywhere yet',
             'other': 'Left out for the reason given',
         }.get(key) or f'Tracked in {_link(key)}'
-        lines += [f'**{heading}** ({_count(size(group), noun)}):', '']
+        lines += [f'**{heading}** ({totals(group)}):', '']
         for finding in group:
             dependency = finding.get('dependency') or {}
             what = dependency.get('classification', finding['kind']).replace('_', ' ')
@@ -360,11 +371,18 @@ def _left_out(findings: list[dict[str, Any]]) -> list[str]:
 
 
 def _measure(finding: dict[str, Any]) -> tuple[int, str]:
-    """How big a finding is: its Dependabot alerts, or for an error its events."""
-    alerts = sum(1 for ref in finding['source']['refs'] if ref.startswith('dependabot#'))
-    if alerts or not finding.get('impact'):
+    """How big a finding is: its Dependabot alerts; for an error, its events; otherwise how many
+    things it cites."""
+    refs = finding['source']['refs']
+    alerts = sum(1 for ref in refs if ref.startswith('dependabot#'))
+    if alerts:
         return alerts, 'alert'
-    return finding['impact'].get('events', 0), 'event'
+    if finding.get('impact'):
+        return finding['impact'].get('events', 0), 'event'
+    return len(refs), 'issue'
+
+
+SEVERITY_RANK = {'critical': 0, 'important': 1, 'suggestion': 2}
 
 
 def _link(url: str) -> str:

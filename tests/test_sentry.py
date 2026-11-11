@@ -111,14 +111,14 @@ class FakeSentry:
 
 class ClientTests(unittest.TestCase):
     def test_unresolved_follows_pages_and_scrubs(self) -> None:
-        second = f'{BASE}/projects/example-org/example-app/issues/?cursor=2'
+        second = f'{BASE}/organizations/example-org/issues/?cursor=2'
         fake = FakeSentry(
             {
                 second: (
                     [{**ISSUE, 'id': '4502', 'shortId': 'EXAMPLE-1A3'}],
                     '<x>; rel="next"; results="false"',
                 ),
-                f'{BASE}/projects/example-org/example-app/issues/': (
+                f'{BASE}/organizations/example-org/issues/': (
                     [ISSUE],
                     f'<{second}>; rel="next"; results="true"',
                 ),
@@ -128,7 +128,10 @@ class ClientTests(unittest.TestCase):
         issues = client.unresolved('production', '14d')
         self.assertEqual([i['short_id'] for i in issues], ['EXAMPLE-1A2', 'EXAMPLE-1A3'])
         self.assertIn('environment=production', fake.asked[0])
-        self.assertIn('query=is%3Aunresolved', fake.asked[0])
+        # The organisation endpoint, which applies the period, filtered to the project.
+        self.assertTrue(fake.asked[0].startswith(f'{BASE}/organizations/example-org/issues/?'))
+        self.assertIn('query=is%3Aunresolved+project%3Aexample-app', fake.asked[0])
+        self.assertIn('statsPeriod=14d', fake.asked[0])
         self.assertEqual((issues[0]['events'], issues[0]['users']), (812, 97))
         self.assertEqual(
             issues[0]['title'],
@@ -160,6 +163,46 @@ class ClientTests(unittest.TestCase):
             ],
         )
         self.assertEqual(summary['tags'], {'release': '5f3a2c1', 'environment': 'production'})
+
+    def test_performance_evidence_is_kept(self) -> None:
+        event = {
+            **EVENT,
+            'entries': [],
+            'occurrence': {
+                'type': 1006,
+                'evidenceData': {
+                    'transactionName': '/staff/{slug}/',
+                    'numberRepeatingSpans': '31',
+                    'parentSpan': 'view - staff_detail',
+                },
+                'evidenceDisplay': [
+                    {
+                        'name': 'Offending Spans',
+                        'value': 'db - SELECT * FROM story WHERE id = %s -- ann@example.org',
+                    }
+                ],
+            },
+        }
+        performance = sentry.event_summary(event)['performance']
+        self.assertEqual(
+            (performance['transaction'], performance['repeated']), ('/staff/{slug}/', '31')
+        )
+        self.assertEqual(
+            performance['evidence'][0]['value'], 'db - SELECT * FROM story WHERE id = %s -- <email>'
+        )
+        self.assertIsNone(sentry.event_summary(EVENT)['performance'])
+
+    def test_lifetime_counts_come_from_the_list_when_given(self) -> None:
+        summary = sentry.issue_summary(
+            {
+                **ISSUE,
+                'count': '190',
+                'userCount': 175,
+                'lifetime': {'count': '699', 'userCount': 430},
+            }
+        )
+        self.assertEqual((summary['events'], summary['users']), (190, 175))
+        self.assertEqual((summary['lifetime_events'], summary['lifetime_users']), (699, 430))
 
     def test_detail_keeps_the_periods_counts(self) -> None:
         summary = sentry.issue_summary({**ISSUE, 'count': '703', 'userCount': 104})
