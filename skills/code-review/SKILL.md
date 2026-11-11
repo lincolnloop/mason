@@ -1,7 +1,7 @@
 ---
 name: code-review
 description: 'This skill should be used when asked to "review PR #N", "review this pull request", "do a code review of #N", "re-review #N" or "follow up on the review of #N" in a project, interactively or unattended (from a scheduler or another agent). It gathers the pull request, its diff annotated with line coordinates, and any earlier review by this skill; reviews the change against the project''s own rules; writes the findings as a validated review.json; and posts one consolidated review that neither approves nor blocks. A follow-up review reports what happened to each earlier finding.'
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Code review
@@ -81,7 +81,12 @@ git -C $PROJECT show <head_sha>:<path>
 
 Read `$PROJECT/AGENTS.md` (or `CLAUDE.md`), and each skill named in `knowledge`, from the
 project's `.claude/skills/<name>/SKILL.md` or `.agents/skills/<name>/SKILL.md` and the reference
-files it points to for the areas the diff touches. These are the project's choices. Where one
+files it points to for the areas the diff touches.
+
+If `knowledge` is empty, list the project's skills and read the ones whose descriptions say they
+are knowledge for writing or reviewing its code (conventions, framework rules, review
+playbooks), not workflows. Name them in the review's `summary` as chosen, not configured, so
+the person can pin them in `[code-review] knowledge`. These are the project's choices. Where one
 contradicts general practice, the project wins. A rule with an id (a heading or a slug the skill
 gives it) is cited by that id in `rule`.
 
