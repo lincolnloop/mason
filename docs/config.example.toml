@@ -50,3 +50,14 @@ fix_within_days_medium = 30
 fix_within_days_low = 90
 # A package with no release for this long is reported as possibly abandoned.
 stale_after_months = 24
+
+[code-review]
+# The project's own knowledge skills the review loads, e.g. its conventions and framework rules.
+knowledge = ['project-conventions']
+# Findings posted as inline comments on the diff: 'none' (one consolidated comment), 'suggestions'
+# (only findings with a suggested replacement, so they can be applied), or 'all'.
+inline = 'none'
+
+[code-review-retrospective]
+# How far back a retrospective looks when there is no earlier one to continue from.
+period_days = 30

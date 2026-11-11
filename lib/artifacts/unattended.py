@@ -27,7 +27,6 @@ BASE_TOOLS = (
     'Grep',
     'Bash(git *)',
     'Bash(gh *)',
-    'Bash(python3 -I *)',
     'Bash(cd *)',
     'Bash(ls *)',
     'Bash(mkdir *)',
@@ -67,6 +66,8 @@ DENIED_TOOLS = (
 class Workflow:
     prompt: str
     tools: tuple[str, ...]
+    # Whether the workflow acts on one pull request, given with --pr.
+    needs_pr: bool = False
 
 
 WORKFLOWS = {
@@ -80,6 +81,16 @@ WORKFLOWS = {
         # This repository's own checks, run before proposing a change to its skills.
         tools=('Bash(python3 -m unittest *)', 'Bash(ruff *)'),
     ),
+    # A review reads someone else's code and never runs it: no build, test or package tools.
+    'code-review': Workflow(
+        prompt='Run the code review for pull request #{pr} in this project, unattended.',
+        tools=(),
+        needs_pr=True,
+    ),
+    'code-review-retrospective': Workflow(
+        prompt='Run the code review retrospective for this project, unattended.',
+        tools=('Bash(python3 -m unittest *)', 'Bash(ruff *)'),
+    ),
 }
 
 
@@ -89,19 +100,26 @@ def command(
     workflow: str,
     extra_tools: tuple[str, ...] = (),
     claude: str = 'claude',
+    pr: int | None = None,
 ) -> list[str]:
     spec = WORKFLOWS[workflow]
+    if spec.needs_pr and pr is None:
+        raise ValueError(f'{workflow} acts on one pull request: give --pr')
     rules = RULES.format(hub=hub.resolve(), project=project.resolve())
+    # Only this repository's own command line, never `python3 -I <any file>`: a project's (or a
+    # pull request's) Python must not be runnable through this rule.
+    artifact = f'Bash(python3 -I {hub.resolve() / "bin" / "artifact"} *)'
     return [
         claude,
         '-p',
-        spec.prompt + rules,
+        spec.prompt.format(pr=pr) + rules,
         '--add-dir',
         str(hub),
         '--permission-mode',
         'dontAsk',
         '--allowedTools',
         *BASE_TOOLS,
+        artifact,
         *spec.tools,
         *extra_tools,
         '--disallowedTools',

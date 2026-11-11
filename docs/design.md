@@ -97,6 +97,8 @@ cover.
 | Decide | a merge skill | the PR's embedded `change`, its CI status, the project's merge policy | merged, or a comment saying why not | not built |
 | Learn | `dependency-retrospective` | `outcomes` collected from the upgrade PRs, the alert history and the package registries | a report issue; a PR to this repo proposing skill changes | built |
 | Report | a report skill | the same `outcomes` | a summary for engineers or clients | not built |
+| Review | `code-review` | one PR: its diff annotated with coordinates, the previous review, replies since | `review` and one posted review, a `COMMENT` | built |
+| Learn | `code-review-retrospective` | `review-outcomes`: what happened to each posted finding | a report issue; a PR to this repo proposing review-skill changes; proposed project rules | built |
 
 The PR is the hand-off between steps. Everything the next step needs is in it, in a form a
 script can read:
@@ -207,6 +209,8 @@ for an example project.
 | Commit upgrades and open the PR, within the open-PR limit | Unattended: the PR is the hand-off |
 | File an issue; create a label; force a dependency past a parent's range | Confirm first; unattended runs list them for a person instead |
 | Open a retrospective's report issue, or its PR proposing a skill change | Unattended: a person reads the report and merges the PR, or doesn't |
+| Post a review of a PR, as a `COMMENT` | Unattended when asked to review it; interactive, confirm first |
+| Approve or request changes on a PR | Never: a person, or a merge step under a policy |
 | Merge | Not the upgrade skill's job: a person, or a separate merge step under the project's policy |
 | Dismiss an alert; change this repo's skills | Person only |
 

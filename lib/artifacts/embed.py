@@ -12,7 +12,7 @@ from typing import Any
 START = '<!-- automation:artifact {schema} -->'
 END = '<!-- /automation:artifact -->'
 BLOCK = re.compile(
-    r'<!-- automation:artifact (?P<schema>[a-z]+/[0-9]+) -->\s*'
+    r'<!-- automation:artifact (?P<schema>[a-z][a-z-]*/[0-9]+) -->\s*'
     r'<details>.*?```json\n(?P<json>.*?)\n```\s*</details>\s*'
     r'<!-- /automation:artifact -->',
     re.DOTALL,

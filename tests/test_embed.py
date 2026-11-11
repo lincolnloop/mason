@@ -15,6 +15,10 @@ class EmbedTests(unittest.TestCase):
         change = make(CHANGE, effect='Has ```code``` and\n```\nfenced\n``` text')
         self.assertEqual(embed.extract(embed.embed(change)), [change])
 
+    def test_hyphenated_schema_names(self) -> None:
+        artifact = {'schema': 'review-outcomes/1', 'reviews': []}
+        self.assertEqual(embed.extract(embed.embed(artifact)), [artifact])
+
     def test_github_line_endings(self) -> None:
         text = embed.embed(FINDING).replace('\n', '\r\n')
         self.assertEqual(embed.extract(text), [FINDING])

@@ -11,7 +11,20 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from . import collect, deps, embed, lock, outcomes, project, render, run, validate
+from . import (
+    collect,
+    deps,
+    diff,
+    embed,
+    lock,
+    outcomes,
+    project,
+    render,
+    review_context,
+    review_outcomes,
+    run,
+    validate,
+)
 
 HUB = Path(__file__).resolve().parents[2]
 
@@ -26,6 +39,47 @@ def main(argv: list[str] | None = None) -> int:
 
     cmd = commands.add_parser('validate', help='validate an artifact file; exit 1 if invalid')
     cmd.add_argument('file', type=Path, help='the artifact JSON file')
+    cmd.add_argument('--diff', type=Path, help="the PR's unified diff (required for a review)")
+
+    cmd = commands.add_parser('annotate-diff', help='prefix every diff line with its coordinates')
+    cmd.add_argument('input', type=Path, nargs='?', help='unified diff (default: stdin)')
+    cmd.add_argument('-o', '--output', type=Path)
+
+    cmd = commands.add_parser(
+        'review-context', help='gather what code-review needs about a PR into a directory'
+    )
+    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('--pr', type=int, required=True)
+    cmd.add_argument('--dir', type=Path, required=True, help='the run directory to write into')
+
+    cmd = commands.add_parser('render-review', help='render a review as a comment or API payload')
+    cmd.add_argument('file', type=Path)
+    cmd.add_argument('--diff', type=Path, required=True)
+    cmd.add_argument('--run', type=Path, required=True, help="the run's run.json")
+    cmd.add_argument('--inline', choices=('none', 'suggestions', 'all'), default='none')
+    cmd.add_argument(
+        '--payload', action='store_true', help='emit the pulls/{n}/reviews API JSON instead'
+    )
+    cmd.add_argument('-o', '--output', type=Path)
+
+    cmd = commands.add_parser(
+        'collect-review-outcomes',
+        help="what happened to code-review's findings over a period, as review-outcomes/1",
+    )
+    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('--run', type=Path, required=True, help="the collecting run's run.json")
+    cmd.add_argument(
+        '--since', help='start of the period (ISO date or time); default period_days ago'
+    )
+    cmd.add_argument('-o', '--output', type=Path)
+
+    cmd = commands.add_parser(
+        'render-review-retrospective', help='render review outcomes and findings as a report'
+    )
+    cmd.add_argument('outcomes', type=Path, help='collect-review-outcomes output')
+    cmd.add_argument('--run', type=Path, required=True, help="the run's run.json")
+    cmd.add_argument('--findings', type=Path, nargs='*', default=[], help='the findings files')
+    cmd.add_argument('-o', '--output', type=Path)
 
     cmd = commands.add_parser('render-change', help='render a change as a pull request body')
     cmd.add_argument('file', type=Path)
@@ -137,8 +191,87 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _validate(args: argparse.Namespace) -> str:
-    artifacts = _load(args.file)
+    artifacts = _load(args.file, diff_file=args.diff)
     return f'{args.file}: valid {artifacts[0]["schema"]}\n'
+
+
+def _annotate(args: argparse.Namespace) -> str:
+    return diff.annotate(_read(args.input) if args.input else sys.stdin.read())
+
+
+def _review_context(args: argparse.Namespace) -> str:
+    try:
+        repo = project.load(args.project)['repo']['name']
+    except project.ConfigError as exc:
+        raise Refused(str(exc)) from exc
+    args.dir.mkdir(parents=True, exist_ok=True)
+    try:
+        context = review_context.fetch(repo, args.pr, args.dir)
+    except (collect.CollectError, ValueError, KeyError) as exc:
+        raise Refused(str(exc)) from exc
+    summary = {
+        key: context[key]
+        for key in ('pr', 'state', 'draft', 'head_sha', 'already_reviewed', 'delta')
+    }
+    summary['previous_review'] = bool(context['previous_review'])
+    summary['files'] = [str(args.dir / name) for name in sorted(p.name for p in args.dir.iterdir())]
+    return json.dumps(summary, indent=2) + '\n'
+
+
+def _render_review(args: argparse.Namespace) -> str:
+    (review,) = _load(args.file, diff_file=args.diff, schema='review/1')
+    (record,) = _load(args.run, schema='run/1')
+    if review['run'] != record['id']:
+        raise Refused(f'review.run is {review["run"]!r}, but {args.run} is run {record["id"]!r}')
+    try:
+        if args.payload:
+            payload = render.review_payload(review, record, args.inline)
+            return json.dumps(payload, indent=2) + '\n'
+        return render.review_comment(review, record, args.inline)
+    except ValueError as exc:
+        raise Refused(str(exc)) from exc
+
+
+def _collect_review_outcomes(args: argparse.Namespace) -> str:
+    (record,) = _load(args.run, schema='run/1')
+    try:
+        config = project.load(args.project, 'code-review-retrospective')
+    except project.ConfigError as exc:
+        raise Refused(str(exc)) from exc
+    since, until = _period(args.since, config['code-review-retrospective']['period_days'])
+    try:
+        result = review_outcomes.collect(config['repo']['name'], record, since, until)
+    except (collect.CollectError, ValueError, KeyError) as exc:
+        raise Refused(str(exc)) from exc
+    errors = validate(result)
+    if errors:
+        raise Refused('\n'.join(['the collected outcomes are invalid:', *errors]))
+    return json.dumps(result, indent=2, ensure_ascii=False) + '\n'
+
+
+def _render_review_retrospective(args: argparse.Namespace) -> str:
+    (collected,) = _load(args.outcomes, schema='review-outcomes/1')
+    (record,) = _load(args.run, schema='run/1')
+    if collected['run'] != record['id']:
+        raise Refused(f'the outcomes are from run {collected["run"]!r}, not {record["id"]!r}')
+    findings = [f for path in args.findings for f in _load(path, schema='finding/1')]
+    try:
+        return render.review_retrospective_body(collected, findings, record)
+    except ValueError as exc:
+        raise Refused(str(exc)) from exc
+
+
+def _period(since_arg: str | None, period_days: int) -> tuple[datetime, datetime]:
+    until = datetime.now(UTC)
+    since = until - timedelta(days=period_days)
+    if since_arg:
+        try:
+            since = datetime.fromisoformat(since_arg.replace('Z', '+00:00'))
+        except ValueError as exc:
+            raise Refused(f'--since: {exc}') from exc
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=UTC)
+    return since, until
 
 
 def _render_change(args: argparse.Namespace) -> str:
@@ -219,15 +352,7 @@ def _collect_outcomes(args: argparse.Namespace) -> str:
         'stale_after_months': settings['stale_after_months'],
         'stale_pr_after_days': config['limits']['stale_after_days'],
     }
-    until = datetime.now(UTC)
-    since = until - timedelta(days=settings['period_days'])
-    if args.since:
-        try:
-            since = datetime.fromisoformat(args.since.replace('Z', '+00:00'))
-        except ValueError as exc:
-            raise Refused(f'--since: {exc}') from exc
-        if since.tzinfo is None:
-            since = since.replace(tzinfo=UTC)
+    since, until = _period(args.since, settings['period_days'])
     repo = config['repo']['name']
     try:
         raw_prs = collect.upgrade_prs(repo)
@@ -365,6 +490,11 @@ COMMANDS = {
     'validate': _validate,
     'render-change': _render_change,
     'render-stopped': _render_stopped,
+    'annotate-diff': _annotate,
+    'review-context': _review_context,
+    'render-review': _render_review,
+    'collect-review-outcomes': _collect_review_outcomes,
+    'render-review-retrospective': _render_review_retrospective,
     'alerts': _alerts,
     'run-start': _run_start,
     'collect-outcomes': _collect_outcomes,
@@ -396,13 +526,16 @@ def _read(path: Path) -> str:
         raise Refused(f'{path}: does not exist') from exc
 
 
-def _load(path: Path, schema: str | None = None) -> list[dict[str, Any]]:
+def _load(
+    path: Path, diff_file: Path | None = None, schema: str | None = None
+) -> list[dict[str, Any]]:
     """Read a file holding one artifact or an array of them, and validate each."""
     try:
         data = json.loads(_read(path))
     except json.JSONDecodeError as exc:
         raise Refused(f'{path}: is not valid JSON: {exc}') from exc
     artifacts = data if isinstance(data, list) else [data]
+    diff_text = _read(diff_file) if diff_file else None
     if not artifacts:
         raise Refused(f'{path}: holds no artifacts')
     problems = []
@@ -411,7 +544,7 @@ def _load(path: Path, schema: str | None = None) -> list[dict[str, Any]]:
         if schema and isinstance(artifact, dict) and artifact.get('schema') != schema:
             problems.append(f'{where}: expected a {schema}, got {artifact.get("schema")!r}')
             continue
-        errors = validate(artifact)
+        errors = validate(artifact, diff_text)
         if errors:
             problems.append(f'{where}: {len(errors)} error(s)')
             problems += [f'- {error}' for error in errors]

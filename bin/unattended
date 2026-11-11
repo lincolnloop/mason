@@ -29,12 +29,18 @@ def main() -> int:
         default='bin/unattended',
         help='what started the run, shown on the PR, e.g. "systemd timer dependency-upgrades.timer"',
     )
+    parser.add_argument('--pr', type=int, help='the pull request, for a workflow that acts on one')
     parser.add_argument('--claude', default='claude', help='the claude executable')
     parser.add_argument('--dry-run', action='store_true', help='print the command; run nothing')
     args = parser.parse_args()
     if not (args.project / '.git').exists():
         parser.error(f'{args.project} is not the root of a git repository')
-    command = unattended.command(HUB, args.project, args.workflow, tuple(args.allow), args.claude)
+    try:
+        command = unattended.command(
+            HUB, args.project, args.workflow, tuple(args.allow), args.claude, args.pr
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.dry_run:
         env = f'AUTOMATION_UNATTENDED=1 AUTOMATION_TRIGGER={shlex.quote(args.trigger)}'
         print(f'cd {shlex.quote(str(args.project))} && {env} {shlex.join(command)}')

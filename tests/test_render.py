@@ -2,7 +2,129 @@ import unittest
 
 from artifacts import embed, render
 
-from .fixtures import CHANGE, DEPENDENCY, FINDING, RUN, make
+from .fixtures import (
+    CHANGE,
+    DEPENDENCY,
+    FINDING,
+    REVIEW,
+    REVIEW_FINDING,
+    REVIEW_RUN,
+    RUN,
+    SHA_A,
+    make,
+)
+
+
+def review_of(*findings: dict, **changes) -> dict:
+    return make(REVIEW, findings=list(findings), **changes)
+
+
+SUGGESTION = make(
+    REVIEW_FINDING,
+    id='F2',
+    fingerprint='app/naming',
+    severity='nit',
+    title='Name',
+    location={'path': 'app/views.py', 'line': 13, 'side': 'RIGHT', 'in_diff': True},
+    suggestion='    extra = False',
+)
+OUTSIDE = make(
+    REVIEW_FINDING,
+    id='F3',
+    fingerprint='app/model-slug',
+    severity='suggestion',
+    title='Slug not unique',
+    location={'path': 'app/models.py', 'line': 171, 'side': 'RIGHT', 'in_diff': False},
+)
+
+
+class DispositionTests(unittest.TestCase):
+    def test_blocking(self) -> None:
+        self.assertEqual(render.disposition(REVIEW), 'Changes requested')
+        self.assertEqual(render.counts(REVIEW), '1 important')
+
+    def test_non_blocking(self) -> None:
+        review = review_of(SUGGESTION, OUTSIDE)
+        self.assertEqual(render.disposition(review), 'No blocking findings')
+        self.assertEqual(render.counts(review), '1 suggestion, 1 nit')
+
+    def test_resolved_findings_do_not_count(self) -> None:
+        review = review_of(make(REVIEW_FINDING, status='addressed'), followup_of=SHA_A)
+        self.assertEqual(render.disposition(review), 'No findings')
+        self.assertEqual(render.counts(review), 'none open')
+
+
+class CommentTests(unittest.TestCase):
+    def test_comment_groups_by_severity_and_embeds_the_review(self) -> None:
+        review = review_of(SUGGESTION, REVIEW_FINDING, OUTSIDE)
+        comment = render.review_comment(review, REVIEW_RUN)
+        self.assertIn('**Changes requested** (1 important, 1 suggestion, 1 nit)', comment)
+        self.assertLess(comment.index('### Important'), comment.index('### Suggestions'))
+        self.assertLess(comment.index('### Suggestions'), comment.index('### Nits'))
+        self.assertIn('**F3. Slug not unique** `app/models.py:171`', comment)
+        self.assertIn('Suggested replacement:\n\n```\n    extra = False\n```', comment)
+        self.assertEqual(embed.extract(comment, 'review/1'), [review])
+
+    def test_follow_up_lists_earlier_findings(self) -> None:
+        review = review_of(
+            make(REVIEW_FINDING, status='declined'),
+            make(SUGGESTION, status='still_open'),
+            followup_of=SHA_A,
+        )
+        comment = render.review_comment(review, REVIEW_RUN)
+        self.assertIn('### Since the last review\n\n- **F1. Lookup**: declined', comment)
+        self.assertIn('(still open from the last review)', comment)
+
+    def test_notes(self) -> None:
+        finding = make(REVIEW_FINDING, evidence='inferred', rule='correctness/x', location=None)
+        comment = render.review_comment(review_of(finding), REVIEW_RUN)
+        self.assertIn('**F1. Lookup** (inferred, not verified; rule `correctness/x`)', comment)
+
+    def test_too_long_is_refused(self) -> None:
+        review = review_of(make(REVIEW_FINDING, body='x' * 70_000))
+        with self.assertRaisesRegex(ValueError, 'GitHub allows'):
+            render.review_comment(review, REVIEW_RUN)
+
+
+class PayloadTests(unittest.TestCase):
+    def test_no_inline_by_default(self) -> None:
+        payload = render.review_payload(review_of(REVIEW_FINDING, SUGGESTION), REVIEW_RUN)
+        self.assertEqual(payload['event'], 'COMMENT')
+        self.assertEqual(payload['commit_id'], REVIEW['head_sha'])
+        self.assertEqual(payload['comments'], [])
+
+    def test_only_suggestions_inline(self) -> None:
+        payload = render.review_payload(
+            review_of(REVIEW_FINDING, SUGGESTION, OUTSIDE), REVIEW_RUN, 'suggestions'
+        )
+        self.assertEqual(len(payload['comments']), 1)
+        comment = payload['comments'][0]
+        self.assertEqual(
+            (comment['path'], comment['line'], comment['side']), ('app/views.py', 13, 'RIGHT')
+        )
+        self.assertIn('```suggestion\n    extra = False\n```', comment['body'])
+        self.assertIn('(suggestion posted inline)', payload['body'])
+
+    def test_all_inline_skips_out_of_diff_and_closed(self) -> None:
+        closed = make(SUGGESTION, id='F4', fingerprint='app/closed', status='withdrawn')
+        review = review_of(REVIEW_FINDING, OUTSIDE, closed, followup_of=SHA_A)
+        payload = render.review_payload(review, REVIEW_RUN, 'all')
+        self.assertEqual([c['line'] for c in payload['comments']], [12])
+
+    def test_range_is_carried(self) -> None:
+        ranged = make(
+            REVIEW_FINDING,
+            location={
+                'path': 'app/views.py',
+                'start_line': 11,
+                'start_side': 'RIGHT',
+                'line': 13,
+                'side': 'RIGHT',
+                'in_diff': True,
+            },
+        )
+        comment = render.review_payload(review_of(ranged), REVIEW_RUN, 'all')['comments'][0]
+        self.assertEqual((comment['start_line'], comment['line']), (11, 13))
 
 
 class ChangeBodyTests(unittest.TestCase):

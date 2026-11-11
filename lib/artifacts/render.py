@@ -1,17 +1,156 @@
-"""Render a change as the pull request body people read, with the artifacts embedded in it.
+"""Render artifacts as the markdown people read, with the artifacts embedded in it.
 
-Everything a reader sees is derived from the artifacts: the package and alert tables are
-computed here, so they can't disagree with the data. Inputs are assumed valid; the
+Everything a reader sees is derived from the artifacts: a review's disposition and counts, a
+change's package and alert tables, a retrospective's figures are computed here, so they can't disagree with the data. Inputs are assumed valid; the
 command line validates before it renders.
 """
 
 from collections import Counter
-from typing import Any
+from typing import Any, Literal
 
 from . import deps
 from .embed import embed
 
 GITHUB_BODY_LIMIT = 65_536
+
+SEVERITY_ORDER = ('critical', 'important', 'suggestion', 'nit')
+SEVERITY_HEADINGS = {
+    'critical': 'Critical',
+    'important': 'Important',
+    'suggestion': 'Suggestions',
+    'nit': 'Nits',
+}
+OPEN = ('new', 'still_open')
+BLOCKING = ('critical', 'important')
+
+Inline = Literal['none', 'suggestions', 'all']
+
+
+# --- Reviews -----------------------------------------------------------------------------------
+
+
+def disposition(review: dict[str, Any]) -> str:
+    open_findings = [f for f in review['findings'] if f['status'] in OPEN]
+    if any(f['severity'] in BLOCKING for f in open_findings):
+        return 'Changes requested'
+    if open_findings:
+        return 'No blocking findings'
+    return 'No findings'
+
+
+def counts(review: dict[str, Any]) -> str:
+    tally = Counter(f['severity'] for f in review['findings'] if f['status'] in OPEN)
+    parts = [f'{tally[s]} {_plural(s, tally[s])}' for s in SEVERITY_ORDER if tally[s]]
+    return ', '.join(parts) if parts else 'none open'
+
+
+def review_comment(review: dict[str, Any], run: dict[str, Any], inline: Inline = 'none') -> str:
+    """The single consolidated comment: every finding, plus the embedded review."""
+    findings = review['findings']
+    open_findings = [f for f in findings if f['status'] in OPEN]
+    lines = [
+        '## Code review',
+        '',
+        f'**{disposition(review)}** ({counts(review)})',
+        '',
+        review['summary'].strip(),
+    ]
+    for severity in SEVERITY_ORDER:
+        group = [f for f in open_findings if f['severity'] == severity]
+        if not group:
+            continue
+        lines += ['', f'### {SEVERITY_HEADINGS[severity]}']
+        for finding in group:
+            lines += ['', *_finding_lines(finding, posted_inline=_is_inline(finding, inline))]
+
+    earlier = [f for f in findings if f['status'] not in OPEN]
+    if earlier:
+        lines += ['', '### Since the last review', '']
+        for finding in earlier:
+            lines.append(
+                f'- **{finding["id"]}. {finding["title"]}**: {finding["status"].replace("_", " ")}'
+            )
+
+    lines += [
+        '',
+        f'<sub>Reviewed {review["head_sha"][:10]} by {_run_line(run)}.</sub>',
+        '',
+        embed(review),
+        '',
+        embed({**run, 'outcome': 'review_posted'}, 'run.json'),
+    ]
+    return _within_limit('\n'.join(lines) + '\n', 'review comment')
+
+
+def review_payload(
+    review: dict[str, Any], run: dict[str, Any], inline: Inline = 'none'
+) -> dict[str, Any]:
+    """The body for POST /repos/{owner}/{repo}/pulls/{number}/reviews.
+
+    Always event COMMENT: an agent's review neither approves nor blocks. Bound to head_sha, so
+    GitHub refuses it if the PR has moved on.
+    """
+    comments = []
+    for finding in review['findings']:
+        if finding['status'] not in OPEN or not _is_inline(finding, inline):
+            continue
+        location = finding['location']
+        comment: dict[str, Any] = {
+            'path': location['path'],
+            'line': location['line'],
+            'side': location['side'],
+            'body': _inline_body(finding),
+        }
+        if 'start_line' in location:
+            comment['start_line'] = location['start_line']
+            comment['start_side'] = location['start_side']
+        comments.append(comment)
+    return {
+        'commit_id': review['head_sha'],
+        'event': 'COMMENT',
+        'body': review_comment(review, run, inline),
+        'comments': comments,
+    }
+
+
+def _is_inline(finding: dict[str, Any], inline: Inline) -> bool:
+    location = finding.get('location')
+    if inline == 'none' or not location or not location['in_diff']:
+        return False
+    return inline == 'all' or finding['suggestion'] is not None
+
+
+def _finding_lines(finding: dict[str, Any], posted_inline: bool) -> list[str]:
+    title = f'**{finding["id"]}. {finding["title"]}**'
+    location = finding.get('location')
+    if location:
+        span = location['line']
+        if 'start_line' in location:
+            span = f'{location["start_line"]}-{location["line"]}'
+        side = ' (removed line)' if location['side'] == 'LEFT' else ''
+        title += f' `{location["path"]}:{span}`{side}'
+    notes = []
+    if finding['status'] == 'still_open':
+        notes.append('still open from the last review')
+    if finding['evidence'] == 'inferred':
+        notes.append('inferred, not verified')
+    if finding['rule']:
+        notes.append(f'rule `{finding["rule"]}`')
+    if posted_inline:
+        notes.append('suggestion posted inline')
+    lines = [title + (f' ({"; ".join(notes)})' if notes else ''), '', finding['body'].strip()]
+    if finding['suggestion'] is not None and not posted_inline:
+        lines += ['', 'Suggested replacement:', '', '```', finding['suggestion'], '```']
+    return lines
+
+
+def _inline_body(finding: dict[str, Any]) -> str:
+    severity = SEVERITY_HEADINGS[finding['severity']].rstrip('s')
+    body = f'**{severity}: {finding["title"]}** ({finding["id"]})\n\n{finding["body"].strip()}'
+    if finding['suggestion'] is not None:
+        body += f'\n\n```suggestion\n{finding["suggestion"]}\n```'
+    return body
+
 
 # --- Changes -----------------------------------------------------------------------------------
 
@@ -327,7 +466,19 @@ def retrospective_body(
         names = ', '.join(f'`{p["package"]}`' for p in unchecked)
         lines += ['', f'Could not check: {names}.']
 
-    lines += ['', '## Findings', '']
+    lines += _findings_section(findings)
+    lines += ['', f'<sub>Reported by {_run_line(run)}.</sub>', '']
+    # People's comments are on the PRs already; leaving them out keeps the embedded data small.
+    compact = {**outcomes, 'prs': [{**pr, 'comments': len(pr['comments'])} for pr in prs]}
+    for artifact in (compact, *findings):
+        label = 'outcomes.json' if artifact is compact else f'finding {artifact["id"]}'
+        lines += [embed(artifact, label), '']
+    lines += [embed({**run, 'outcome': 'issue_opened'}, 'run.json'), '']
+    return _within_limit('\n'.join(lines), 'issue body')
+
+
+def _findings_section(findings: list[dict[str, Any]]) -> list[str]:
+    lines = ['', '## Findings', '']
     if not findings:
         lines.append('No findings this period.')
     for kind, heading in FINDING_GROUPS:
@@ -342,15 +493,68 @@ def retrospective_body(
                 f'Evidence: {refs}.'
             ]
         lines.append('')
+    return lines
 
+
+def review_retrospective_title(outcomes: dict[str, Any]) -> str:
+    period = outcomes['period']
+    return f'Code review retrospective: {period["since"][:10]} to {period["until"][:10]}'
+
+
+def review_retrospective_body(
+    outcomes: dict[str, Any], findings: list[dict[str, Any]], run: dict[str, Any]
+) -> str:
+    """The report issue for a code-review retrospective: what happened to the findings it
+    posted, by category and severity, then the retrospective's own findings."""
+    reviews = outcomes['reviews']
+    posted = [f for r in reviews for f in r['findings']]
+    lines = [
+        f'**{review_retrospective_title(outcomes)}.**',
+        '',
+        f'{_count(len(reviews), "review")} on {_count(len({r["pr"] for r in reviews}), "PR")}, '
+        f'with {_count(len(posted), "finding")}. A finding counts as acted on when its lines '
+        'changed in a later commit, or a follow-up review found it addressed.',
+    ]
+    if posted:
+        for heading, key in (('By category', 'category'), ('By severity', 'severity')):
+            lines += [
+                '',
+                f'## {heading}',
+                '',
+                f'| {key.capitalize()} | Findings | Acted on | Declined | Withdrawn | No sign |',
+                '|---|---:|---:|---:|---:|---:|',
+            ]
+            values = sorted(
+                {f[key] for f in posted},
+                key=lambda v: SEVERITY_ORDER.index(v) if key == 'severity' else v,
+            )
+            for value in values:
+                group = [f for f in posted if f[key] == value]
+                tally = Counter(_reaction(f) for f in group)
+                lines.append(
+                    f'| {_cell(value)} | {len(group)} | {tally["acted on"]} | {tally["declined"]} '
+                    f'| {tally["withdrawn"]} | {tally["no sign"]} |'
+                )
+    lines += _findings_section(findings)
     lines += ['', f'<sub>Reported by {_run_line(run)}.</sub>', '']
-    # People's comments are on the PRs already; leaving them out keeps the embedded data small.
-    compact = {**outcomes, 'prs': [{**pr, 'comments': len(pr['comments'])} for pr in prs]}
+    # People's words are on the PRs already; leaving them out keeps the embedded data small.
+    compact = {
+        **outcomes,
+        'reviews': [{**r, 'said_after': len(r['said_after'])} for r in reviews],
+    }
     for artifact in (compact, *findings):
-        label = 'outcomes.json' if artifact is compact else f'finding {artifact["id"]}'
+        label = 'review-outcomes.json' if artifact is compact else f'finding {artifact["id"]}'
         lines += [embed(artifact, label), '']
     lines += [embed({**run, 'outcome': 'issue_opened'}, 'run.json'), '']
     return _within_limit('\n'.join(lines), 'issue body')
+
+
+def _reaction(finding: dict[str, Any]) -> str:
+    if finding['later_status'] == 'addressed' or finding['lines_changed']:
+        return 'acted on'
+    if finding['later_status'] in ('declined', 'withdrawn'):
+        return finding['later_status']
+    return 'no sign'
 
 
 def _pr_outcome(pr: dict[str, Any]) -> str:
@@ -440,6 +644,11 @@ def _run_details(run: dict[str, Any]) -> str:
 
 
 # --- Helpers -----------------------------------------------------------------------------------
+
+
+def _plural(severity: str, number: int) -> str:
+    word = {'suggestion': 'suggestion', 'nit': 'nit'}.get(severity, severity)
+    return word + ('s' if number != 1 and severity in ('suggestion', 'nit') else '')
 
 
 def _cell(text: str) -> str:

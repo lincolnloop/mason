@@ -7,6 +7,8 @@ which steps a person does.
 | Workflow | Source | Output |
 |---|---|---|
 | `dependency-upgrades` | Dependabot alerts | one PR, one commit per package, with derived package and alert tables. It never merges: the PR is the hand-off |
+| `code-review` | a pull request | one consolidated review, posted as a comment with its findings embedded; follow-ups report what happened to each earlier finding |
+| `code-review-retrospective` | what happened to the review findings over a period | a report issue: which categories people act on; a PR to this repo when the review skill should change; proposed rules for the project |
 | `dependency-retrospective` | what happened to the upgrade PRs and alerts over a period | a report issue: time to fix against targets, where the time went, stale or abandoned packages; and a PR to this repo when the upgrade skill should change |
 
 ## Set up
@@ -49,8 +51,9 @@ cd path/to/<project>
 claude --add-dir path/to/mason
 ```
 
-Then ask for "run the dependency upgrades", or "run the dependency retrospective". The
-upgrade run tells you what it detected, asks before anything
+Then ask for "run the dependency upgrades", "review PR #42", or a retrospective ("run the
+dependency retrospective", "run the code review retrospective"). The upgrade run tells you what
+it detected, asks before anything
 that needs confirmation (running tests that can't share a machine, opening issues), and ends
 with the PR link and a short report. Each run's files (alerts, findings, the PR body, a
 worktree) are kept under `runs/<project>/`.
@@ -59,6 +62,12 @@ worktree) are kept under `runs/<project>/`.
 
 ```sh
 path/to/mason/bin/unattended dependency-upgrades path/to/<project>
+```
+
+A workflow that acts on one pull request takes it with `--pr`:
+
+```sh
+path/to/mason/bin/unattended code-review path/to/<project> --pr 42
 ```
 
 This runs Claude Code headless from the project. The run:
@@ -124,12 +133,13 @@ reviewer needs is on GitHub.
 
 ```
 skills/<name>/SKILL.md      one skill per workflow
-schemas/                    the artifact contracts (finding, change, run, outcomes), with examples
+schemas/                    the artifact contracts, with examples
 lib/artifacts/              validators, renderers, embedding, config, locking, the dependency
                             readers, outcome collection, and the unattended runner
-bin/artifact                the command line skills call: config, version, lock, run-start,
-                            validate, render-change, render-stopped, render-retrospective,
-                            collect-outcomes, extract, deps-diff, alerts-closed
+bin/artifact                the command line skills call (`--help` lists them all): config,
+                            run-start, lock, validate, the collectors (alerts, deps-diff,
+                            alerts-closed, review-context, collect-outcomes,
+                            collect-review-outcomes), the renderers, annotate-diff, extract
 bin/unattended              start a workflow headless, for schedulers and other agents
 tests/                      stdlib unittest; the schema pages' examples are tests too
 docs/design.md              principles, steps and hand-offs, autonomy, distribution

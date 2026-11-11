@@ -32,6 +32,19 @@ class UnattendedTests(unittest.TestCase):
         self.assertIn('Bash(python3 -m unittest *)', command)
         self.assertNotIn('Bash(npm *)', command)
 
+    def test_only_this_repositorys_command_line_runs_python(self) -> None:
+        command = unattended.command(Path('/hub'), Path('/work/app'), 'dependency-upgrades')
+        self.assertIn('Bash(python3 -I /hub/bin/artifact *)', command)
+        self.assertNotIn('Bash(python3 -I *)', command)
+
+    def test_code_review_needs_a_pr_and_runs_nothing_from_it(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'give --pr'):
+            unattended.command(Path('/hub'), Path('/work/app'), 'code-review')
+        command = unattended.command(Path('/hub'), Path('/work/app'), 'code-review', pr=7)
+        self.assertIn('pull request #7', command[2])
+        for tool in ('Bash(make *)', 'Bash(npm *)', 'Bash(python3 -m unittest *)'):
+            self.assertNotIn(tool, command)
+
     def test_log_path(self) -> None:
         log = unattended.log_path(
             Path('/hub'),

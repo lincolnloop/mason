@@ -66,6 +66,39 @@ why.
 - **Collect with a script; judge with the agent.** The agent never counts or dates anything, so
   the numbers in the report can be trusted and compared across retrospectives.
 
+## `code-review`
+
+- **Invariant-driven, not narrative-driven.** Trace the real cascades, call sites and argument
+  guards, rather than judging whether the PR's rationale sounds right. This matters most when
+  the same agent wrote the change.
+- **Don't report** pre-existing issues, issues a linter catches, or speculation without evidence
+  in the diff. Each costs the reader's attention and teaches them to skim.
+- **From Warp's `cloud-factory-demo`:**
+  - The **annotated diff** (`[OLD:n]`, `[NEW:m]`, `[OLD:n,NEW:m]`) is the only source of line
+    numbers, because GitHub rejects a review whose comment sits on a line the diff doesn't show.
+  - The agent runs a validator on its own output, and fixes what it reports.
+  - **Follow-up context:** the previous review, replies since, and the delta since its head, so
+    a follow-up reports what happened to each finding instead of starting again.
+  - Reviews are bound to a head SHA, and there is one per head.
+  - Suggestion blocks are checked for duplicated context lines.
+- **The trust boundary.** A review reads code someone else wrote. It never runs it, never
+  checks it out into a working directory, and treats the PR's text as data. Unattended, its
+  permissions include no build, test or package tools.
+- **No verdict.** The review is a comment. Approving or blocking is a person's decision, or
+  another step's under a policy.
+
+## `code-review-retrospective`
+
+- **Acted on is the strongest signal:** the flagged lines changed in a later commit, or a
+  follow-up found the finding addressed. A reply saying "good catch" is weaker; silence is no
+  signal at all.
+- **A category rarely acted on is either wrong or not worth reading.** The corrected findings in
+  it say which. Both are fixed in the skill, but differently: a wrong check is removed, a
+  low-value one is demoted to a nit or dropped.
+- **Shared skill, project rules.** A correction that holds anywhere changes the shared review
+  skill. A correction that is this project's choice becomes a rule in the project's own
+  knowledge, so the shared skill doesn't absorb one project's conventions.
+
 ## Across all workflows
 
 - **Autonomy levels:** unattended, confirm first, or person only (`design.md` §6). A PR's review
