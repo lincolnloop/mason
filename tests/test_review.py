@@ -201,5 +201,12 @@ class SuggestionTests(unittest.TestCase):
         )
 
 
+class InlineSettingTests(unittest.TestCase):
+    def test_recorded_setting_is_checked(self) -> None:
+        self.assertEqual(review.validate(make(REVIEW, inline='all'), DIFF), [])
+        errors = review.validate(make(REVIEW, inline='some'), DIFF)
+        self.assertTrue(any(e.startswith('$.inline: must be one of') for e in errors))
+
+
 if __name__ == '__main__':
     unittest.main()

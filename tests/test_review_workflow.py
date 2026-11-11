@@ -56,7 +56,7 @@ class ReviewCommentTests(unittest.TestCase):
         self.assertIn('**Changes requested** (1 important)', comment)
         self.assertIn('Reviewed cccccccccc by run `20261111-093000-code-review`', comment)
         review, run = embed.extract(comment)
-        self.assertEqual(review, REVIEW)
+        self.assertEqual(review, {**REVIEW, 'inline': 'none'})
         self.assertEqual(run['outcome'], 'review_posted')
 
     def test_payload_is_a_comment_bound_to_the_head(self) -> None:
@@ -102,7 +102,7 @@ class ContextTests(unittest.TestCase):
                 ],
             )
         )
-        self.assertEqual(context['previous_review'], earlier)
+        self.assertEqual(context['previous_review'], {**earlier, 'inline': 'none'})
         self.assertFalse(context['already_reviewed'])
         self.assertEqual([s['body'] for s in context['said_since']], ['F1 is fine.'])
 
@@ -200,6 +200,49 @@ class OutcomeTests(unittest.TestCase):
         statuses = [f['later_status'] for r in result['reviews'] for f in r['findings']]
         self.assertEqual(statuses, ['declined', None])
 
+    def test_inline_findings_are_matched_to_their_threads(self) -> None:
+        reviewed = make(REVIEW, head_sha=SHA_A)
+        comment = posted(reviewed, '2026-11-03T00:00:00Z')
+        comment['body'] = render.review_comment(reviewed, REVIEW_RUN, 'all')
+        thread = {
+            'isResolved': True,
+            'isOutdated': True,
+            'path': 'app/views.py',
+            'originalLine': 12,
+            'diffSide': 'RIGHT',
+            'comments': {
+                'nodes': [{'originalCommit': {'oid': SHA_A}, 'body': '**Important: Lookup** (F1)'}]
+            },
+        }
+        other = {**thread, 'originalLine': 40, 'isResolved': False}
+        result = review_outcomes.build(
+            repo='example-org/example-app',
+            run=RETRO_RUN,
+            since=SINCE,
+            until=UNTIL,
+            prs=[pr(reviews=[comment])],
+            diffs={(SHA_A, SHA_C): DIFF},
+            threads={7: [other, thread]},
+        )
+        self.assertEqual(review_outcomes.validate(result), [])
+        (review,) = result['reviews']
+        self.assertEqual(review['inline'], 'all')
+        (finding,) = review['findings']
+        self.assertTrue(finding['posted_inline'])
+        self.assertEqual(finding['thread'], {'resolved': True, 'outdated': True})
+
+    def test_unrecorded_setting_is_unknown_not_none(self) -> None:
+        # A review posted before the setting was recorded embeds no `inline` field.
+        old = {
+            'author': {'login': 'bot'},
+            'state': 'COMMENTED',
+            'submittedAt': '2026-11-03T00:00:00Z',
+            'body': embed.embed(REVIEW),
+        }
+        (review,) = self.build([pr(reviews=[old])])['reviews']
+        self.assertIsNone(review['inline'])
+        self.assertIsNone(review['findings'][0]['posted_inline'])
+
     def test_head_that_did_not_move(self) -> None:
         result = self.build([pr(reviews=[posted(REVIEW, '2026-11-03T00:00:00Z')])])
         self.assertFalse(result['reviews'][0]['findings'][0]['lines_changed'])
@@ -247,8 +290,9 @@ class OutcomeTests(unittest.TestCase):
         body = render.review_retrospective_body(result, [skill_change], RETRO_RUN)
         self.assertTrue(body.startswith('**Code review retrospective: 2026-11-01 to 2026-12-01.**'))
         self.assertIn('1 review on 1 PR, with 2 findings.', body)
-        self.assertIn('| correctness | 1 | 1 | 0 | 0 | 0 |', body)
-        self.assertIn('| style | 1 | 0 | 0 | 0 | 1 |', body)
+        self.assertIn('| correctness | 1 | 1 | 0 | 0 | 0 | 0 |', body)
+        self.assertIn('| style | 1 | 0 | 0 | 0 | 1 | 0 |', body)
+        self.assertIn('| none | 2 | 1 | 0 | 0 | 1 | 0 |', body)
         self.assertLess(body.index('| important |'), body.index('| nit |'))
         self.assertIn('### Proposed changes to the workflow', body)
         schemas = {a['schema'] for a in embed.extract(body)}

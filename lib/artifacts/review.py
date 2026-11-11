@@ -19,6 +19,7 @@ STATUSES = ('new', 'still_open', 'addressed', 'declined', 'withdrawn')
 EVIDENCE_STATUSES = ('verified', 'inferred')
 SIDES = ('LEFT', 'RIGHT')
 MAX_INLINE = 50
+INLINE_SETTINGS = ('none', 'suggestions', 'all')
 MAX_RANGE_LINES = 10
 
 FINDING_ID = re.compile(r'^F[1-9][0-9]*$')
@@ -44,9 +45,12 @@ FINDING_FIELDS = (
 def validate(artifact: Any, diff_text: str | None = None) -> list[str]:
     """Validate a review. With `diff_text`, also check every location against the diff."""
     checker = Checker()
-    if not checker.object(artifact, '$', ENVELOPE_FIELDS + FIELDS):
+    if not checker.object(artifact, '$', ENVELOPE_FIELDS + FIELDS, ('inline',)):
         return checker.errors
     check_envelope(checker, artifact, SCHEMA)
+    if 'inline' in artifact:
+        # Set by the renderer when it posts the review, never by the author.
+        checker.choice(artifact['inline'], '$.inline', INLINE_SETTINGS)
     checker.string(artifact.get('run'), '$.run', pattern=RUN_ID_PATTERN, pattern_hint='a run id')
     checker.integer(artifact.get('pr'), '$.pr', minimum=1)
     for key in ('base_sha', 'head_sha'):

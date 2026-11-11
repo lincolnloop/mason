@@ -55,6 +55,7 @@ diff --git a/shop/views.py b/shop/views.py
 | `run` | The id of the run that wrote the review. Its `run/1` record is embedded beside it in the posted comment. |
 | `pr`, `base_sha`, `head_sha` | The PR and the exact commits reviewed. A review is bound to `head_sha`. |
 | `followup_of` | The `head_sha` of the previous review of this PR, or `null`. |
+| `inline` | Optional, and never written by the author: the renderer adds the `[code-review] inline` setting (`none`, `suggestions`, `all`) when it posts the review, so the retrospective can compare settings. |
 | `summary` | What was checked, and anything deliberately out of scope. Not a restatement of the diff. |
 | `findings[].id` | `F1`, `F2`, … within this review. |
 | `findings[].fingerprint` | `area/slug`, **stable across reviews of the PR**: a follow-up review reuses it to report what happened to the finding. |
@@ -82,6 +83,10 @@ The validator checks `in_diff` against the diff in both directions:
 - `false` on a line it does show is also an error, so the field stays a fact.
 
 A finding with `in_diff: false` is rendered in the comment body with its `path:line`.
+
+Only `new` findings are posted inline. A finding carried into a follow-up already has its
+comment, which GitHub keeps on the latest diff while its lines are unchanged and marks outdated
+once they change; posting it again would put two comments on one line.
 
 A suggestion that begins with the line just above the range, or ends with the line just below
 it, is rejected, because applying it would duplicate that line.

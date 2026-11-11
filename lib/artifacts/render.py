@@ -61,7 +61,7 @@ def review_comment(review: dict[str, Any], run: dict[str, Any], inline: Inline =
             continue
         lines += ['', f'### {SEVERITY_HEADINGS[severity]}']
         for finding in group:
-            lines += ['', *_finding_lines(finding, posted_inline=_is_inline(finding, inline))]
+            lines += ['', *_finding_lines(finding, posted_inline=is_inline(finding, inline))]
 
     earlier = [f for f in findings if f['status'] not in OPEN]
     if earlier:
@@ -75,7 +75,8 @@ def review_comment(review: dict[str, Any], run: dict[str, Any], inline: Inline =
         '',
         f'<sub>Reviewed {review["head_sha"][:10]} by {_run_line(run)}.</sub>',
         '',
-        embed(review),
+        # The setting it was posted with travels with it, for the retrospective to compare.
+        embed({**review, 'inline': inline}),
         '',
         embed({**run, 'outcome': 'review_posted'}, 'run.json'),
     ]
@@ -92,7 +93,7 @@ def review_payload(
     """
     comments = []
     for finding in review['findings']:
-        if finding['status'] not in OPEN or not _is_inline(finding, inline):
+        if finding['status'] not in OPEN or not is_inline(finding, inline):
             continue
         location = finding['location']
         comment: dict[str, Any] = {
@@ -113,9 +114,15 @@ def review_payload(
     }
 
 
-def _is_inline(finding: dict[str, Any], inline: Inline) -> bool:
+def is_inline(finding: dict[str, Any], inline: Inline) -> bool:
+    """Whether a finding is posted as an inline comment under the `inline` setting.
+
+    Only `new` findings: an earlier finding carried into a follow-up already has its comment,
+    which GitHub keeps on the latest diff while its lines are unchanged, and marks outdated once
+    they change. Posting it again would put two comments on one line.
+    """
     location = finding.get('location')
-    if inline == 'none' or not location or not location['in_diff']:
+    if inline == 'none' or finding['status'] != 'new' or not location or not location['in_diff']:
         return False
     return inline == 'all' or finding['suggestion'] is not None
 
@@ -569,24 +576,32 @@ def review_retrospective_body(
         'changed in a later commit, or a follow-up review found it addressed.',
     ]
     if posted:
-        for heading, key in (('By category', 'category'), ('By severity', 'severity')):
+        # The inline setting each finding's review was posted with, for comparing settings.
+        settings = {id(f): r['inline'] or 'unrecorded' for r in reviews for f in r['findings']}
+        tables = (
+            ('By category', 'Category', lambda f: f['category']),
+            ('By severity', 'Severity', lambda f: f['severity']),
+            ('By inline setting', 'Setting', lambda f: settings[id(f)]),
+        )
+        for heading, label, key in tables:
             lines += [
                 '',
                 f'## {heading}',
                 '',
-                f'| {key.capitalize()} | Findings | Acted on | Declined | Withdrawn | No sign |',
-                '|---|---:|---:|---:|---:|---:|',
+                f'| {label} | Findings | Acted on | Declined | Withdrawn | No sign | Thread resolved |',
+                '|---|---:|---:|---:|---:|---:|---:|',
             ]
             values = sorted(
-                {f[key] for f in posted},
-                key=lambda v: SEVERITY_ORDER.index(v) if key == 'severity' else v,
+                {key(f) for f in posted},
+                key=lambda v: SEVERITY_ORDER.index(v) if label == 'Severity' else v,
             )
             for value in values:
-                group = [f for f in posted if f[key] == value]
+                group = [f for f in posted if key(f) == value]
                 tally = Counter(_reaction(f) for f in group)
+                resolved = sum(1 for f in group if (f.get('thread') or {}).get('resolved'))
                 lines.append(
                     f'| {_cell(value)} | {len(group)} | {tally["acted on"]} | {tally["declined"]} '
-                    f'| {tally["withdrawn"]} | {tally["no sign"]} |'
+                    f'| {tally["withdrawn"]} | {tally["no sign"]} | {resolved} |'
                 )
     lines += _findings_section(findings)
     lines += ['', f'<sub>Reported by {_run_line(run)}.</sub>', '']

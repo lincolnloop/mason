@@ -63,7 +63,7 @@ class CommentTests(unittest.TestCase):
         self.assertLess(comment.index('### Suggestions'), comment.index('### Nits'))
         self.assertIn('**F3. Slug not unique** `app/models.py:171`', comment)
         self.assertIn('Suggested replacement:\n\n```\n    extra = False\n```', comment)
-        self.assertEqual(embed.extract(comment, 'review/1'), [review])
+        self.assertEqual(embed.extract(comment, 'review/1'), [{**review, 'inline': 'none'}])
 
     def test_follow_up_lists_earlier_findings(self) -> None:
         review = review_of(
@@ -104,6 +104,21 @@ class PayloadTests(unittest.TestCase):
         )
         self.assertIn('```suggestion\n    extra = False\n```', comment['body'])
         self.assertIn('(suggestion posted inline)', payload['body'])
+
+    def test_follow_up_posts_only_new_findings_inline(self) -> None:
+        # A finding carried forward already has its inline comment from the earlier review.
+        carried = make(REVIEW_FINDING, status='still_open')
+        fresh = make(SUGGESTION, status='new')
+        payload = render.review_payload(
+            review_of(carried, fresh, followup_of=SHA_A), REVIEW_RUN, 'all'
+        )
+        self.assertEqual([c['line'] for c in payload['comments']], [13])
+        self.assertIn('(still open from the last review)', payload['body'])
+
+    def test_the_setting_travels_with_the_review(self) -> None:
+        comment = render.review_comment(review_of(REVIEW_FINDING), REVIEW_RUN, 'all')
+        (embedded,) = embed.extract(comment, 'review/1')
+        self.assertEqual(embedded['inline'], 'all')
 
     def test_all_inline_skips_out_of_diff_and_closed(self) -> None:
         closed = make(SUGGESTION, id='F4', fingerprint='app/closed', status='withdrawn')

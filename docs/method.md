@@ -99,6 +99,11 @@ why.
 - **A category rarely acted on is either wrong or not worth reading.** The corrected findings in
   it say which. Both are fixed in the skill, but differently: a wrong check is removed, a
   low-value one is demoted to a nit or dropped.
+- **Inline comments are an experiment, not a default.** A consolidated comment is read once;
+  inline comments sit on the lines, can be resolved one at a time, and are marked outdated when
+  their lines change. Which works better for a team is measured, not assumed: run one setting
+  for a period, then the other, so each reviewer's experience is consistent within a period,
+  and compare at the level of findings, of which there are more than PRs.
 - **Shared skill, project rules.** A correction that holds anywhere changes the shared review
   skill. A correction that is this project's choice becomes a rule in the project's own
   knowledge, so the shared skill doesn't absorb one project's conventions.

@@ -30,6 +30,7 @@ embedded in them, and for each review compares the reviewed head with the PR's f
       "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "followup_of": null,
       "run": "20261111-093000-code-review",
+      "inline": "all",
       "findings": [
         {
           "id": "F1",
@@ -40,7 +41,12 @@ embedded in them, and for each review compares the reviewed head with the PR's f
           "title": "Lookup",
           "location": "app/views.py:12",
           "later_status": null,
-          "lines_changed": true
+          "lines_changed": true,
+          "posted_inline": true,
+          "thread": {
+            "resolved": true,
+            "outdated": true
+          }
         }
       ],
       "said_after": [
@@ -59,8 +65,11 @@ embedded in them, and for each review compares the reviewed head with the PR's f
 | Field | Meaning |
 |---|---|
 | `reviews[]` | One per review the skill posted in the period: its PR, when, the commit it reviewed, the run that wrote it, and what became of the PR (`pr_state`). |
+| `reviews[].inline` | The `[code-review] inline` setting the review was posted with: `none`, `suggestions` or `all`. `null` for a review posted before the setting was recorded. The report tallies findings by it, to compare settings. |
 | `findings[].later_status` | What the next review of the same PR said about this finding, matched by `fingerprint`: `addressed`, `declined`, `still_open` or `withdrawn`. `null` if there was no later review. |
 | `findings[].lines_changed` | Whether a later commit on the PR changed the flagged lines (within three lines), the strongest sign that a finding was acted on. `false` if the head didn't move after the review; `null` for a finding with no location, or on a removed line. |
+| `findings[].posted_inline` | Whether the finding was posted as an inline comment under that setting (only `new` findings are). `null` when the setting wasn't recorded. |
+| `findings[].thread` | For a finding posted inline, its conversation thread: `resolved` (someone closed it) and `outdated` (a later commit changed its lines). `null` if it had no thread. Read through GitHub's GraphQL API, and matched by file, line, side, the reviewed commit, and the finding's id in the comment. |
 | `said_after` | What people said on the PR after the review, as comments or reviews (`kind`), up to 4,000 characters each. The retrospective reads it to tell a finding that was right but not worth fixing from one that was wrong. |
 
 A finding counts as **acted on** when its lines changed or a follow-up found it addressed. The

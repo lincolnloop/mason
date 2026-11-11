@@ -7,6 +7,7 @@ skill. For each review this skill posted, and each of its findings:
 - whether a later follow-up review found it `addressed`, `declined`, `still_open` or `withdrawn`;
 - whether the flagged lines changed in a later commit on the PR, which is the strongest sign a
   finding was acted on;
+- for a finding posted inline, whether its conversation thread was resolved or is outdated;
 - what people said on the PR afterwards, for the agent to read;
 - what became of the PR: merged, closed or still open.
 
@@ -18,13 +19,28 @@ from datetime import UTC, datetime
 from typing import Any
 
 from . import collect as fetch
-from . import review_context
+from . import render, review_context
 from ._check import ENVELOPE_FIELDS, Checker, check_envelope
 from .run import ID_PATTERN as RUN_ID_PATTERN
 
 SCHEMA = 'review-outcomes/1'
 PR_FIELDS = 'number,title,url,state,createdAt,mergedAt,closedAt,headRefOid,comments,reviews'
 FIELDS = ('run', 'period', 'reviews')
+# Each thread's state, and enough to match it to the finding that started it.
+THREADS_QUERY = """
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100) {
+        nodes {
+          isResolved isOutdated path originalLine diffSide
+          comments(first: 1) { nodes { originalCommit { oid } body } }
+        }
+      }
+    }
+  }
+}
+"""
 REVIEW_FIELDS = (
     'pr',
     'url',
@@ -33,6 +49,7 @@ REVIEW_FIELDS = (
     'head_sha',
     'followup_of',
     'run',
+    'inline',
     'findings',
     'said_after',
 )
@@ -46,6 +63,8 @@ FINDING_FIELDS = (
     'location',
     'later_status',
     'lines_changed',
+    'posted_inline',
+    'thread',
 )
 
 
@@ -87,12 +106,16 @@ def build(
     until: datetime,
     prs: list[dict[str, Any]],
     diffs: dict[tuple[str, str], str],
+    threads: dict[int, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    """The outcomes, from `gh pr view` data and the diffs between reviewed and final heads.
+    """The outcomes, from `gh pr view` data, the diffs between reviewed and final heads, and
+    each PR's review threads.
 
     `diffs` maps (reviewed head, final head) to the diff between them; a missing entry means
-    the head didn't move after that review. Pure.
+    the head didn't move after that review. `threads` maps a PR number to its review threads,
+    as the GraphQL API returns them. Pure.
     """
+    threads = threads or {}
     reviews = []
     for pr in prs:
         said = review_context.said(pr)
@@ -116,8 +139,16 @@ def build(
                     'head_sha': review['head_sha'],
                     'followup_of': review['followup_of'],
                     'run': review['run'],
+                    # None for a review posted before the setting was recorded.
+                    'inline': review.get('inline'),
                     'findings': [
-                        _finding(f, later_status.get(f['fingerprint']), delta)
+                        _finding(
+                            f,
+                            later_status.get(f['fingerprint']),
+                            delta,
+                            review,
+                            threads.get(pr['number'], []),
+                        )
                         for f in review['findings']
                     ],
                     'said_after': [
@@ -141,7 +172,11 @@ def build(
 
 
 def _finding(
-    finding: dict[str, Any], later_status: str | None, delta: str | None
+    finding: dict[str, Any],
+    later_status: str | None,
+    delta: str | None,
+    review: dict[str, Any],
+    threads: list[dict[str, Any]],
 ) -> dict[str, Any]:
     location = finding['location']
     if location is None or location['side'] != 'RIGHT':
@@ -160,7 +195,35 @@ def _finding(
         'location': None if location is None else f'{location["path"]}:{location["line"]}',
         'later_status': later_status,
         'lines_changed': changed,
+        'posted_inline': (
+            None if review.get('inline') is None else render.is_inline(finding, review['inline'])
+        ),
+        'thread': _thread(finding, review['head_sha'], threads),
     }
+
+
+def _thread(
+    finding: dict[str, Any], head_sha: str, threads: list[dict[str, Any]]
+) -> dict[str, bool] | None:
+    """The inline thread this finding started, if it was posted inline: the one on its line, on
+    the reviewed commit, whose first comment names the finding's id."""
+    location = finding['location']
+    if location is None:
+        return None
+    for thread in threads:
+        first = ((thread.get('comments') or {}).get('nodes') or [{}])[0]
+        if (
+            thread.get('path') == location['path']
+            and thread.get('originalLine') == location['line']
+            and thread.get('diffSide') == location['side']
+            and (first.get('originalCommit') or {}).get('oid') == head_sha
+            and f'({finding["id"]})' in (first.get('body') or '')
+        ):
+            return {
+                'resolved': bool(thread.get('isResolved')),
+                'outdated': bool(thread.get('isOutdated')),
+            }
+    return None
 
 
 def collect(
@@ -183,7 +246,8 @@ def collect(
             'number',
         )
     )
-    prs, diffs = [], {}
+    prs, diffs, threads = [], {}, {}
+    owner, name = repo.split('/')
     for entry in listed:
         pr = json.loads(
             fetch.gh('pr', 'view', str(entry['number']), '--repo', repo, '--json', PR_FIELDS)
@@ -192,13 +256,30 @@ def collect(
         if not posted:
             continue
         prs.append(pr)
+        data = json.loads(
+            fetch.gh(
+                'api',
+                'graphql',
+                '-f',
+                f'query={THREADS_QUERY}',
+                '-F',
+                f'owner={owner}',
+                '-F',
+                f'name={name}',
+                '-F',
+                f'number={pr["number"]}',
+            )
+        )
+        threads[pr['number']] = data['data']['repository']['pullRequest']['reviewThreads']['nodes']
         for item in posted:
             head = item['review']['head_sha']
             if head != pr['headRefOid'] and (head, pr['headRefOid']) not in diffs:
                 diffs[(head, pr['headRefOid'])] = review_context.compare_diff(
                     repo, head, pr['headRefOid']
                 )
-    return build(repo=repo, run=run, since=since, until=until, prs=prs, diffs=diffs)
+    return build(
+        repo=repo, run=run, since=since, until=until, prs=prs, diffs=diffs, threads=threads
+    )
 
 
 def _parse(value: str) -> datetime:

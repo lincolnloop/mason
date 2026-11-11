@@ -1,7 +1,7 @@
 ---
 name: code-review-retrospective
 description: 'This skill should be used when asked to "run the code review retrospective", "how are the automated reviews doing", "what do people do with the review findings" or "improve the code review skill" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over code-review: a script collects what happened to every finding the reviews posted over a period (whether the flagged lines changed, what a follow-up review concluded, what people replied), and this skill judges which findings people found right, wrong or not worth it. It opens one report issue, proposes changes to the review skill as a PR when a pattern holds across PRs, and proposes project rules where the project disagrees with the review.'
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Code review retrospective
@@ -86,6 +86,13 @@ and something should change.
 - **The same correction on several PRs:** a check the review keeps getting wrong.
 - **Missed problems:** a person's comment on a reviewed PR pointing out something in the
   reviewed lines that the review didn't flag.
+- **Inline or not.** The report tallies findings by the `inline` setting their review was posted
+  with, and counts resolved threads (`thread.resolved`), a signal only inline comments give. If
+  the period holds reviews under more than one setting, compare them: acted on, declined,
+  resolved, and "no sign". Say how many findings each figure rests on; a difference across a
+  handful of findings is not evidence. A setting is changed in the project's
+  `.agents/automation.toml`, so a recommendation here is an `investigate` finding for the
+  project, not a skill change.
 - **Follow-ups that disagree with themselves:** a finding marked `addressed` when its lines
   didn't change, or `still_open` after someone gave a good reason.
 

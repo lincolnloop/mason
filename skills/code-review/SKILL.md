@@ -1,7 +1,7 @@
 ---
 name: code-review
 description: 'This skill should be used when asked to "review PR #N", "review this pull request", "do a code review of #N", "re-review #N" or "follow up on the review of #N" in a project, interactively or unattended (from a scheduler or another agent). It gathers the pull request, its diff annotated with line coordinates, and any earlier review by this skill; reviews the change against the project''s own rules; writes the findings as a validated review.json; and posts one consolidated review that neither approves nor blocks. A follow-up review reports what happened to each earlier finding.'
-version: 1.1.0
+version: 1.2.0
 ---
 
 # Code review
@@ -152,6 +152,11 @@ artifact validate $RUN/review.json --diff $RUN/pr.diff
 artifact render-review $RUN/review.json --diff $RUN/pr.diff --run $RUN/run.json --inline <inline> -o $RUN/comment.md
 artifact render-review $RUN/review.json --diff $RUN/pr.diff --run $RUN/run.json --inline <inline> --payload -o $RUN/payload.json
 ```
+
+`inline` decides which findings also appear as comments on their lines, in "Files changed":
+`none` (only the consolidated comment), `suggestions` (findings with a replacement to apply), or
+`all` (every finding on a line in the diff). Only `new` findings go inline: one carried into a
+follow-up keeps the comment it already has. The setting is recorded in the posted review.
 
 Interactive: show `comment.md`, and post once confirmed. Then:
 
