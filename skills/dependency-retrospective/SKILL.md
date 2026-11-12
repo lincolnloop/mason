@@ -19,13 +19,12 @@ counts, dates or computes a duration itself. The report is a GitHub issue, so it
 people already are, and its data is embedded so the next retrospective can build on it.
 
 **Paths.** `$HUB` is the mason repository: two directories above this file, once symlinks are
-resolved (a skill may be reached through a link to it). `$PROJECT` is the project root: the
-working directory when launched from the project, or the directory named in the request.
-`artifact` below means `python3 -I $HUB/bin/artifact`. `RUN` is the run directory, printed in
-Step 1.3. These are names for paths, not shell variables: write each path out in full in
-commands. Unattended, a command that uses or assigns a shell variable, or redirects output with
-`>`, is refused; every command here that saves a file does it with its own option (`-o`,
-`--body-file`).
+resolved (a skill may be reached through a link to it). `$PROJECT` is the project root: the working
+directory when launched from the project, or the directory named in the request. `artifact` below
+means `uv run --project $HUB --locked python -I $HUB/bin/artifact`. `RUN` is the run directory,
+printed in Step 1.3. These are names for paths, not shell variables: write each path out in full in
+commands. Unattended, a command that uses or assigns a shell variable, or redirects output with `>`,
+is refused; every command here that saves a file does it with its own option (`-o`, `--body-file`).
 
 **Modes.** As in `dependency-upgrades`: interactive by default; unattended when the request
 says so or `AUTOMATION_UNATTENDED=1` is set. Unattended, ask nothing: list what needed a person
@@ -165,8 +164,8 @@ say so in the report you give.
    (the `id` in `$RUN/run.json` without its suffix), in `$RUN/hub`.
 2. Make each change the findings describe, and nothing else. Bump the changed skill's minor
    `version`.
-3. Run this repository's checks there: `python3 -m unittest discover -s tests -t .` and
-   `ruff check . && ruff format --check .`. They must pass.
+3. Run this repository's checks there: `uv run --locked python -m unittest discover -s tests -t .`
+   and `ruff check . && ruff format --check .`. They must pass.
 4. Write `$RUN/hub-change.json` (`change/1`):
    - `project` is this repository, and `run` is the run's id;
    - `findings` are the `skill_change` ids;

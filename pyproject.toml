@@ -1,4 +1,18 @@
-# Tool configuration only. This repository has no installable package and no dependencies.
+# The environment mason's scripts run in, through uv: `uv run --project <mason> --locked python -I
+# <mason>/bin/artifact`. uv provides the Python version and installs what uv.lock pins, so the only
+# prerequisite on the Python side is uv itself. Dependencies are declared here and locked; ask
+# before adding one, and prefer the standard library where it does the job.
+
+[project]
+name = 'mason'
+version = '0.1.0'
+description = 'Agent workflows shared across repositories'
+requires-python = '>=3.12'
+dependencies = []
+
+[tool.uv]
+# Scripts, not an installable package: lib/ is put on the path by bin/artifact.
+package = false
 
 [tool.ruff]
 line-length = 100

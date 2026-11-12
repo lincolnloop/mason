@@ -153,6 +153,11 @@ recurring.
   allow only what the workflow needs. Anything else is refused, not asked about. The skill asks
   nothing. It lists what needed a person in its report, leaves the tests to CI when it can't
   run them locally (`verify.ci`), and opens a draft when it can't verify at all.
+- **Prerequisites are checked before a run starts.** The bootstrap set is git, gh, Claude Code
+  and uv; uv provides Python and the dependencies `uv.lock` pins. `bin/unattended` runs
+  `artifact doctor` first, offline, and starts no session if a tool, login, token or the locked
+  environment is missing. Sessions run with `UV_OFFLINE=1`, so a run never resolves or
+  downloads a package.
 - **One run at a time per project.** `artifact lock` holds a lock under `runs/` for the length
   of a run, so overlapping triggers can't race.
 - **One run, one PR.** A run never adds to an open upgrade PR, because a reviewer part-way

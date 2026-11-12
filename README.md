@@ -17,8 +17,11 @@ which steps a person does.
 
 You need, on the machine that runs the workflow:
 
-- Python 3.12 or later, git, and an agent: [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- [uv](https://docs.astral.sh/uv/), git, and an agent: [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
   or [Codex](https://developers.openai.com/codex). Unattended runs need Claude Code for now.
+  uv provides Python (3.12 or later; it installs one if none is present) and this repository's
+  locked dependencies, so nothing else on the Python side needs installing.
+- Node 22.20 or later, if you install rulesets with `npx skills` or a project has npm lockfiles.
 - `gh`, logged in as someone who can read the project's Dependabot alerts and push branches.
   Check with `gh api 'repos/<owner>/<repo>/dependabot/alerts?per_page=1'`.
 - Whatever the project needs to recompile its requirements and build: pip-tools for
@@ -36,16 +39,25 @@ Then:
    ```sh
    git clone <this repository> path/to/mason
    ```
-2. **Check what it detects in the project.** No configuration file is needed. This prints what
+2. **Create its environment, and check the prerequisites.** `uv sync` builds the environment
+   from `uv.lock` (and is what lets unattended runs work offline); `doctor` reports any missing
+   tool, login or token. Add `--workflow <name>` to check a workflow's tokens, and `--unattended`
+   for a scheduled run's.
+   ```sh
+   uv sync --project path/to/mason
+   uv run --project path/to/mason --locked python -I path/to/mason/bin/artifact doctor
+   ```
+3. **Check what it detects in the project.** No configuration file is needed. This prints what
    was found (the GitHub repo, main branch, requirements files, npm lockfiles, CI) and where
    each value came from:
    ```sh
-   python3 -I path/to/mason/bin/artifact config path/to/<project> --section dependency-upgrades
+   uv run --project path/to/mason --locked python -I path/to/mason/bin/artifact \
+     config path/to/<project> --section dependency-upgrades
    ```
    To change a value, `--toml` prints a starting `.agents/automation.toml` for the project:
    uncomment the lines to change, and commit the file there. `docs/config.example.toml` has every
    key.
-3. **Create the label** the workflow's PRs carry. It is how open agent PRs are counted:
+4. **Create the label** the workflow's PRs carry. It is how open agent PRs are counted:
    ```sh
    gh label create automation --repo <owner>/<repo> --description 'Opened by an agent workflow'
    ```
@@ -100,6 +112,11 @@ path/to/mason/bin/unattended code-review path/to/<project> --pr 42
 ```
 
 This runs Claude Code headless from the project (Codex isn't supported here yet). The run:
+- **Checks first.** `artifact doctor` runs before the session starts, and a missing tool,
+  login or token stops the run with the reason.
+- **Works offline on the Python side.** uv is told not to resolve or download anything
+  (`UV_OFFLINE=1`), so a run only ever uses what `uv.lock` pinned and `uv sync` installed. After
+  changing mason's dependencies, run `uv sync` again on the machine that runs workflows.
 - **Asks nothing.** Everything that needed a person is listed in its report.
 - **Uses only the tools the workflow needs.** Anything else is refused, and merging is always
   refused.
@@ -146,6 +163,8 @@ Type=oneshot
 # KEY=value lines, readable only by you (chmod 600): CLAUDE_CODE_OAUTH_TOKEN (from
 # `claude setup-token`), GH_TOKEN, and SENTRY_AUTH_TOKEN for the Sentry workflows.
 EnvironmentFile=%h/.config/mason/env
+# uv's usual install location; a user unit's PATH doesn't include it.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=path/to/mason/bin/unattended dependency-upgrades path/to/<project> --trigger 'systemd timer dependency-upgrades.timer'
 
 # ~/.config/systemd/user/dependency-upgrades.timer
@@ -174,11 +193,12 @@ schemas/                    the artifact contracts, with examples
 lib/artifacts/              validators, renderers, embedding, config, locking, the dependency
                             readers, outcome collection, and the unattended runner
 bin/artifact                the command line skills call (`--help` lists them all): config,
-                            run-start, lock, validate, the collectors (alerts, deps-diff,
+                            doctor, run-start, lock, validate, the collectors (alerts, deps-diff,
                             alerts-closed, review-context, sentry-issues, sentry-event,
                             open-findings, collect-*-outcomes), the renderers, annotate-diff,
                             extract
 bin/unattended              start a workflow headless, for schedulers and other agents
+pyproject.toml, uv.lock     the Python environment uv runs every script in, and its lock
 tests/                      stdlib unittest; the schema pages' examples are tests too
 docs/design.md              principles, steps and hand-offs, autonomy, distribution
 docs/method.md              the checks the workflow makes, and why

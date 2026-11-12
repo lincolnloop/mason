@@ -3,3 +3,5 @@ __pycache__/
 .env
 # Run directories: worktrees, alert snapshots, draft artifacts.
 runs/
+# The environment uv creates from uv.lock.
+.venv/

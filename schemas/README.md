@@ -30,8 +30,8 @@ Every artifact has:
 ## Validating
 
 ```sh
-python3 -I path/to/mason/bin/artifact validate finding.json
-python3 -I path/to/mason/bin/artifact validate review.json --diff pr.diff
+uv run --project path/to/mason --locked python -I path/to/mason/bin/artifact validate finding.json
+uv run --project path/to/mason --locked python -I path/to/mason/bin/artifact validate review.json --diff pr.diff
 ```
 
 A validator reports every error, each naming the field (`$.dependency.fixed`) and what to

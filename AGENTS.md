@@ -11,8 +11,11 @@ Codex with `bin/link-skills`: `docs/design.md` §7), so:
   values detected from the repository and defaults (`docs/design.md` §5). If a skill needs a
   value that isn't in the configuration, add it to `lib/artifacts/project.py`, with detection or
   a default where one is safe, rather than hard-coding it.
-- **Scripts are stdlib-only Python 3.12** and self-contained. They must not import from a
-  consuming repo and must run with `python3 -I`. Ask before adding any dependency.
+- **Scripts are Python 3.12, run through uv** in this repository's own locked environment
+  (`pyproject.toml`, `uv.lock`): `uv run --project <mason> --locked python -I <script>`. They
+  must not import from a consuming repo, and `-I` keeps the project's directory and
+  `PYTHONPATH` off the import path. Dependencies are declared and locked; ask before adding one,
+  and prefer the standard library where it does the job.
 - **Contracts are stable.** Changing a schema in `schemas/` means bumping its version and updating
   every skill that reads or writes it in the same change.
 - **Skills are agent-neutral.** They use no tool or feature only one agent has, and find
@@ -25,14 +28,18 @@ Style: single quotes, 100-character lines, explicit type hints, ruff for lint an
 
 ## Commands
 
-- Tests (stdlib `unittest`, no install step): `python3 -m unittest discover -s tests -t .`
+- Tests (stdlib `unittest`): `uv run --locked python -m unittest discover -s tests -t .`
 - Lint and format: `ruff check . && ruff format --check .`
-- Validate an artifact: `python3 -I bin/artifact validate <file.json>` (a review also takes
+- Validate an artifact: `uv run --locked python -I bin/artifact validate <file.json>` (a review also takes
   `--diff <pr.diff>`)
-- A project's resolved configuration: `python3 -I bin/artifact config <project> [--toml]`
+- A project's resolved configuration:
+  `uv run --locked python -I bin/artifact config <project> [--toml]`
+- Check the prerequisites (tools, `gh` login, a workflow's tokens):
+  `uv run --locked python -I bin/artifact doctor [--workflow <name>] [--unattended]`
 - Run a workflow unattended: `bin/unattended <workflow> <project> [--pr N] [--dry-run]`
 - Link the skills for Codex: `bin/link-skills [--dir DIR] [--remove] [--dry-run]`
-- Everything else: `python3 -I bin/artifact --help`
+- Everything else: `uv run --locked python -I bin/artifact --help`
+- After changing dependencies in `pyproject.toml`: `uv lock`, and commit `uv.lock` with it.
 
 The JSON examples in `schemas/*.md` are run as tests (`tests/test_schema_docs.py`), review
 examples against the page's `diff` block. When a schema changes, update its page in the same

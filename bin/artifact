@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-"""The command line the workflow skills call. Run with `python3 -I`, which ignores the current
-directory and environment; this script adds only this repository's own `lib/` to the path."""
+"""The command line the workflow skills call. Run it in this repository's locked environment:
+
+    uv run --project <mason> --locked python -I <mason>/bin/artifact <command> ...
+
+`-I` ignores the current directory (usually a project's) and the environment; this script adds
+only this repository's own `lib/` to the path."""
 
 import sys
 from pathlib import Path

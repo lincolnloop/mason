@@ -5,6 +5,7 @@ Every command that reads an artifact validates it first and refuses to go on if 
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
@@ -15,6 +16,7 @@ from . import (
     collect,
     deps,
     diff,
+    doctor,
     embed,
     lock,
     outcomes,
@@ -25,6 +27,7 @@ from . import (
     run,
     sentry,
     sentry_outcomes,
+    unattended,
     validate,
 )
 
@@ -224,6 +227,18 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     commands.add_parser('version', help="this repository's commit, for produced_by.automation_sha")
+
+    cmd = commands.add_parser(
+        'doctor', help='check the tools, login and tokens a workflow needs; exit 1 if any fail'
+    )
+    cmd.add_argument(
+        '--workflow',
+        choices=sorted(unattended.WORKFLOWS),
+        help='also check the tokens this workflow needs',
+    )
+    cmd.add_argument(
+        '--unattended', action='store_true', help='also check for a long-lived Claude token'
+    )
 
     cmd = commands.add_parser('lock', help='take or release the one-run-at-a-time lock')
     cmd.add_argument('action', choices=('acquire', 'release'))
@@ -622,6 +637,15 @@ def _config(args: argparse.Namespace) -> str:
     return json.dumps(output, indent=2) + '\n'
 
 
+def _doctor(args: argparse.Namespace) -> str:
+    tokens = unattended.WORKFLOWS[args.workflow].env if args.workflow else ()
+    checks = doctor.run_checks(HUB, tokens, dict(os.environ), args.unattended)
+    report = doctor.render(checks)
+    if doctor.failed(checks):
+        raise Refused(report.rstrip('\n'))
+    return report
+
+
 def _version(args: argparse.Namespace) -> str:
     def git(*command: str) -> str:
         result = subprocess.run(
@@ -651,6 +675,7 @@ def _lock(args: argparse.Namespace) -> str:
 COMMANDS = {
     'config': _config,
     'version': _version,
+    'doctor': _doctor,
     'lock': _lock,
     'validate': _validate,
     'render-change': _render_change,

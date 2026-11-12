@@ -16,12 +16,12 @@ the same code, so several fix PRs may be open at once, up to `limits.open_agent_
 already in an open PR or triage issue is never reported again.
 
 **Paths.** `$HUB` is the mason repository: two directories above this file, once symlinks are
-resolved (a skill may be reached through a link to it). `$PROJECT` is the project root: the
-working directory when launched from the project, or the directory named in the request.
-`artifact` below means `python3 -I $HUB/bin/artifact`. `RUN` is the run directory, printed in
-Step 1.3. These are names for paths, not shell variables: write each path out in full in
-commands. Unattended, a command that uses or assigns a shell variable, or redirects output with
-`>`, is refused; every command here that saves a file does it with its own option.
+resolved (a skill may be reached through a link to it). `$PROJECT` is the project root: the working
+directory when launched from the project, or the directory named in the request. `artifact` below
+means `uv run --project $HUB --locked python -I $HUB/bin/artifact`. `RUN` is the run directory,
+printed in Step 1.3. These are names for paths, not shell variables: write each path out in full in
+commands. Unattended, a command that uses or assigns a shell variable, or redirects output with `>`,
+is refused; every command here that saves a file does it with its own option.
 
 ## Modes, trust and privacy
 

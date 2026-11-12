@@ -5,7 +5,7 @@
 # lockfiles, an ignored .env) or defaulted. So a project only needs the file once a value has to
 # differ, and then only the keys that differ. To see what a project resolves to, and where each
 # value came from, as a starting file:
-#   python3 -I path/to/mason/bin/artifact config <project dir> --toml
+#   uv run --project path/to/mason --locked python -I path/to/mason/bin/artifact config <project dir> --toml
 # tests/test_project.py validates this file.
 
 [repo]
