@@ -1,7 +1,7 @@
 ---
 name: sentry-errors
 description: 'This skill should be used when asked to "fix the Sentry errors", "triage Sentry for production", "run the Sentry pass", "look at the unresolved errors" or "fix the N+1 queries Sentry reports" in a project, interactively or unattended (from a scheduler or another agent). It reads one environment''s unresolved Sentry issues through the API (without personal data), groups them by root cause, checks each group''s releases and history, and records every group as a finding. It fixes the most valuable fixable group as one pull request, with a regression test and a signal the retrospective checks: that the errors stop. Findings that need a person go in the PR, or in a triage issue when there is nothing to fix.'
-version: 1.0.0
+version: 1.0.1
 ---
 
 # Sentry errors
@@ -15,12 +15,13 @@ two bugs, or one symptom of two causes reported as one.
 the same code, so several fix PRs may be open at once, up to `limits.open_agent_prs`. A group
 already in an open PR or triage issue is never reported again.
 
-**Paths.** `$HUB` is the mason repository: two directories above this file. `$PROJECT` is the
-project root: the working directory when launched from the project, or the directory named in
-the request. `artifact` below means `python3 -I $HUB/bin/artifact`. `RUN` is the run directory,
-printed in Step 1.3. These are names for paths, not shell variables: write each path out in full
-in commands. Unattended, a command that uses or assigns a shell variable, or redirects output
-with `>`, is refused; every command here that saves a file does it with its own option.
+**Paths.** `$HUB` is the mason repository: two directories above this file, once symlinks are
+resolved (a skill may be reached through a link to it). `$PROJECT` is the project root: the
+working directory when launched from the project, or the directory named in the request.
+`artifact` below means `python3 -I $HUB/bin/artifact`. `RUN` is the run directory, printed in
+Step 1.3. These are names for paths, not shell variables: write each path out in full in
+commands. Unattended, a command that uses or assigns a shell variable, or redirects output with
+`>`, is refused; every command here that saves a file does it with its own option.
 
 ## Modes, trust and privacy
 

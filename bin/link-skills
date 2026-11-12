@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""Link this repository's skills into a directory an agent scans: `bin/link-skills`.
+
+For Codex, which finds skills only in `.agents/skills` directories and `~/.agents/skills`, not
+in a directory added with `--add-dir`. See lib/artifacts/skill_links.py."""
+
+import argparse
+import sys
+from pathlib import Path
+
+HUB = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(HUB / 'lib'))
+
+from artifacts import skill_links  # noqa: E402
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog='link-skills', description=__doc__)
+    parser.add_argument(
+        '--dir',
+        type=Path,
+        default=Path.home() / '.agents' / 'skills',
+        help='where to link them (default: ~/.agents/skills)',
+    )
+    parser.add_argument('--remove', action='store_true', help="remove this repository's links")
+    parser.add_argument(
+        '--dry-run', action='store_true', help='say what would change; change nothing'
+    )
+    args = parser.parse_args()
+    act = skill_links.unlink if args.remove else skill_links.link
+    results = act(HUB, args.dir.expanduser(), args.dry_run)
+    for result in results:
+        print(f'{result.status:9} {result.name}' + (f': {result.detail}' if result.detail else ''))
+    return 1 if any(r.status == 'conflict' for r in results) else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -1,7 +1,7 @@
 ---
 name: code-review
 description: 'This skill should be used when asked to "review PR #N", "review this pull request", "do a code review of #N", "re-review #N" or "follow up on the review of #N" in a project, interactively or unattended (from a scheduler or another agent). It gathers the pull request, its diff annotated with line coordinates, and any earlier review by this skill; reviews the change against the project''s own rules; writes the findings as a validated review.json; and posts one consolidated review that neither approves nor blocks. A follow-up review reports what happened to each earlier finding.'
-version: 1.2.0
+version: 1.2.1
 ---
 
 # Code review
@@ -14,12 +14,13 @@ the retrospective, can tell exactly what was said about which lines.
 The review is a `COMMENT`. It never approves, requests changes, or merges: deciding the PR is a
 person's job, or another step's.
 
-**Paths.** `$HUB` is the mason repository: two directories above this file. `$PROJECT` is the
-project root: the working directory when launched from the project, or the directory named in
-the request. `artifact` below means `python3 -I $HUB/bin/artifact`. `RUN` is the run directory,
-printed in Step 1.3. These are names for paths, not shell variables: write each path out in full
-in commands. Unattended, a command that uses or assigns a shell variable, or redirects output
-with `>`, is refused; every command here that saves a file does it with its own option.
+**Paths.** `$HUB` is the mason repository: two directories above this file, once symlinks are
+resolved (a skill may be reached through a link to it). `$PROJECT` is the project root: the
+working directory when launched from the project, or the directory named in the request.
+`artifact` below means `python3 -I $HUB/bin/artifact`. `RUN` is the run directory, printed in
+Step 1.3. These are names for paths, not shell variables: write each path out in full in
+commands. Unattended, a command that uses or assigns a shell variable, or redirects output with
+`>`, is refused; every command here that saves a file does it with its own option.
 
 ## Modes and trust
 

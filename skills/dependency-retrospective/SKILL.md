@@ -1,7 +1,7 @@
 ---
 name: dependency-retrospective
 description: 'This skill should be used when asked to "run the dependency retrospective", "review how the dependency upgrades are going", "check the upgrade outcomes", "are we keeping up with security alerts" or "find abandoned packages" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over dependency-upgrades: a script collects what happened to the upgrade PRs and the alerts over a period, and this skill judges it in three areas: whether alerts are fixed fast enough, whether the upgrade skill classified correctly, and which packages look stale or abandoned. It opens one report issue, and proposes changes to the upgrade skill as a PR when the evidence warrants it.'
-version: 1.0.0
+version: 1.0.1
 ---
 
 # Dependency retrospective
@@ -18,13 +18,14 @@ The facts come from a script (`artifact collect-outcomes`). This skill judges th
 counts, dates or computes a duration itself. The report is a GitHub issue, so it is read where
 people already are, and its data is embedded so the next retrospective can build on it.
 
-**Paths.** `$HUB` is the mason repository: two directories above this file. `$PROJECT`
-is the project root: the working directory when launched from the project, or the directory
-named in the request. `artifact` below means `python3 -I $HUB/bin/artifact`. `RUN` is the run
-directory, printed in Step 1.3. These are names for paths, not shell variables: write each path
-out in full in commands. Unattended, a command that uses or assigns a shell variable, or
-redirects output with `>`, is refused; every command here that saves a file does it with its own
-option (`-o`, `--body-file`).
+**Paths.** `$HUB` is the mason repository: two directories above this file, once symlinks are
+resolved (a skill may be reached through a link to it). `$PROJECT` is the project root: the
+working directory when launched from the project, or the directory named in the request.
+`artifact` below means `python3 -I $HUB/bin/artifact`. `RUN` is the run directory, printed in
+Step 1.3. These are names for paths, not shell variables: write each path out in full in
+commands. Unattended, a command that uses or assigns a shell variable, or redirects output with
+`>`, is refused; every command here that saves a file does it with its own option (`-o`,
+`--body-file`).
 
 **Modes.** As in `dependency-upgrades`: interactive by default; unattended when the request
 says so or `AUTOMATION_UNATTENDED=1` is set. Unattended, ask nothing: list what needed a person

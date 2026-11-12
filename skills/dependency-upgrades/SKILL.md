@@ -1,7 +1,7 @@
 ---
 name: dependency-upgrades
 description: 'This skill should be used when asked to "run the dependency upgrades", "do the Dependabot pass", "triage Dependabot alerts", "apply the easy security upgrades" or "check for easy dependency upgrades" in a project, interactively or unattended (from a scheduler or another agent). It pulls open Dependabot alerts, classifies each against what is actually installed (separating EOL lines, blocked ranges, major bumps and missing fixes from easy upgrades), records every one as a finding, applies the easy upgrades one commit per package, and opens one pull request whose package and alert tables are derived from the lockfiles. It never merges: the PR, with its embedded artifacts, is the hand-off to whoever does.'
-version: 2.6.0
+version: 2.6.1
 ---
 
 # Dependency upgrades
@@ -20,13 +20,14 @@ The PR is the whole record and the hand-off:
 This skill does one thing: it opens the PR. Reviewing, merging and reporting are separate steps,
 done by a person or by another agent that reads the PR.
 
-**Paths.** `$HUB` is the mason repository: two directories above this file. `$PROJECT`
-is the project root: the working directory when launched from the project, or the directory
-named in the request. `artifact` below means `python3 -I $HUB/bin/artifact`. `RUN` is the run
-directory, printed in Step 1.3. These are names for paths, not shell variables: write each path
-out in full in commands. Unattended, a command that uses or assigns a shell variable, or
-redirects output with `>`, is refused; every command here that saves a file does it with its own
-option (`-o`, `--body-file`).
+**Paths.** `$HUB` is the mason repository: two directories above this file, once symlinks are
+resolved (a skill may be reached through a link to it). `$PROJECT` is the project root: the
+working directory when launched from the project, or the directory named in the request.
+`artifact` below means `python3 -I $HUB/bin/artifact`. `RUN` is the run directory, printed in
+Step 1.3. These are names for paths, not shell variables: write each path out in full in
+commands. Unattended, a command that uses or assigns a shell variable, or redirects output with
+`>`, is refused; every command here that saves a file does it with its own option (`-o`,
+`--body-file`).
 
 ## Modes
 

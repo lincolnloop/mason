@@ -230,8 +230,17 @@ holds a copy of the workflow skills. Facts from the Claude Code docs (checked 20
   - `CLAUDE.md` only when `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1` is set;
   - never `AGENTS.md` (make `CLAUDE.md` a symlink to it), hooks, `.mcp.json` or most settings.
     Hooks and MCP servers come only from the primary working directory.
-- **Other tools:** Codex has `--add-dir` (write access) and `--cd`. Gemini has
-  `--include-directories`. Whether they load skills from added directories isn't verified.
+- **Codex** (its skills docs, checked 2026-11-12) reads the same `SKILL.md` format (`name` and
+  `description` required). It scans `.agents/skills` in every directory from the working
+  directory up to the repository root, then `~/.agents/skills` and `/etc/codex/skills`, and
+  follows symlinked skill folders. The docs don't say that a directory added with `--add-dir`
+  is scanned, and `--add-dir` is what gives the session write access to it. So with Codex the
+  skills are linked into `~/.agents/skills` (`bin/link-skills`), and the session is launched
+  with `--add-dir` for this repo, for the run files under `runs/`. Two skills with the same
+  name are both listed, not merged. Not yet tried in a live run.
+- **Gemini** has `--include-directories`. Whether it loads skills from them isn't verified.
+- **Any agent** can be told to read a skill's `SKILL.md` by path and follow it. The skills
+  use no tool that only one agent has, so this is the way in that always works.
 
 Launch from the project, so its own CLAUDE.md, skills, hooks, MCP servers and permissions all
 apply, with this repo's skills added:
@@ -243,8 +252,13 @@ claude --add-dir path/to/mason
 
 Consequences:
 
-- This repo exposes its skills at `.claude/skills/`, a symlink to `skills/`, because that is the
-  path Claude Code discovers.
+- This repo exposes its skills at `.claude/skills/` and `.agents/skills/`, symlinks to
+  `skills/`, the paths Claude Code and Codex discover. A skill may be reached through a link, so
+  it finds this repo from its own path with symlinks resolved.
+- **Unattended runs are Claude Code only.** `bin/unattended` builds a `claude -p` command line,
+  with Claude Code's permission rules. Another agent needs its own adapter, mapping the same
+  intent (allowed and denied commands, the prompt, the environment) onto its own permission
+  model; Codex relies on a sandbox rather than a list of allowed commands.
 - **No vendoring.** Skills call the shared code in `lib/` by path, relative to the skill
   directory.
 - **Every skill begins by resolving its target project.** It runs `artifact config`, reads the

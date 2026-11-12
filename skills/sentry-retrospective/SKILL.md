@@ -1,7 +1,7 @@
 ---
 name: sentry-retrospective
 description: 'This skill should be used when asked to "run the Sentry retrospective", "did the Sentry fixes work", "are the errors coming back" or "how are we doing on Sentry errors" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over sentry-errors: a script checks, for every fix PR, whether its Sentry issues stopped after the merge, and collects the triage issues and what is still unresolved. This skill judges why fixes didn''t work, what keeps recurring, and what the project should change so the same class of error doesn''t ship again. It opens one report issue, and proposes skill changes as a PR when the evidence warrants it.'
-version: 1.0.0
+version: 1.0.1
 ---
 
 # Sentry retrospective
@@ -19,12 +19,13 @@ The facts come from a script (`artifact collect-sentry-outcomes`), which reads e
 issue's last event from Sentry. This skill judges them. The report is a GitHub issue with the
 data embedded, so each retrospective continues from the last.
 
-**Paths.** `$HUB` is the mason repository: two directories above this file. `$PROJECT` is the
-project root: the working directory when launched from the project, or the directory named in
-the request. `artifact` below means `python3 -I $HUB/bin/artifact`. `RUN` is the run directory,
-printed in Step 1.3. These are names for paths, not shell variables: write each path out in full
-in commands. Unattended, a command that uses or assigns a shell variable, or redirects output
-with `>`, is refused; every command here that saves a file does it with its own option.
+**Paths.** `$HUB` is the mason repository: two directories above this file, once symlinks are
+resolved (a skill may be reached through a link to it). `$PROJECT` is the project root: the
+working directory when launched from the project, or the directory named in the request.
+`artifact` below means `python3 -I $HUB/bin/artifact`. `RUN` is the run directory, printed in
+Step 1.3. These are names for paths, not shell variables: write each path out in full in
+commands. Unattended, a command that uses or assigns a shell variable, or redirects output with
+`>`, is refused; every command here that saves a file does it with its own option.
 
 **Modes and privacy.** As in `sentry-errors`: interactive by default, unattended when the
 request says so or `AUTOMATION_UNATTENDED=1` is set; Sentry is read only through `artifact`;

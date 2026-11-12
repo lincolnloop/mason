@@ -3,8 +3,8 @@
 Guidance for coding agents working **on** this repository. `CLAUDE.md` and `GEMINI.md` are
 symlinks to this file.
 
-Skills here run against other repositories (reached with `claude --add-dir`, `docs/design.md`
-§7), so:
+Skills here run against other repositories (reached with `claude --add-dir`, or linked for
+Codex with `bin/link-skills`: `docs/design.md` §7), so:
 
 - **Nothing project-specific in a skill.** Repository names, paths, commands and labels come
   from `artifact config`: the consuming repo's optional configuration file, over
@@ -15,6 +15,9 @@ Skills here run against other repositories (reached with `claude --add-dir`, `do
   consuming repo and must run with `python3 -I`. Ask before adding any dependency.
 - **Contracts are stable.** Changing a schema in `schemas/` means bumping its version and updating
   every skill that reads or writes it in the same change.
+- **Skills are agent-neutral.** They use no tool or feature only one agent has, and find
+  this repository from their own path with symlinks resolved, since they may be reached
+  through `.claude/skills`, `.agents/skills` or a user-level link.
 - **Every script has tests** beside it, covering malformed input as well as the happy path.
 
 Style: single quotes, 100-character lines, explicit type hints, ruff for lint and format
@@ -28,6 +31,7 @@ Style: single quotes, 100-character lines, explicit type hints, ruff for lint an
   `--diff <pr.diff>`)
 - A project's resolved configuration: `python3 -I bin/artifact config <project> [--toml]`
 - Run a workflow unattended: `bin/unattended <workflow> <project> [--pr N] [--dry-run]`
+- Link the skills for Codex: `bin/link-skills [--dir DIR] [--remove] [--dry-run]`
 - Everything else: `python3 -I bin/artifact --help`
 
 The JSON examples in `schemas/*.md` are run as tests (`tests/test_schema_docs.py`), review

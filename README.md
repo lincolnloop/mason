@@ -17,7 +17,8 @@ which steps a person does.
 
 You need, on the machine that runs the workflow:
 
-- Python 3.12 or later, git, and [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+- Python 3.12 or later, git, and an agent: [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+  or [Codex](https://developers.openai.com/codex). Unattended runs need Claude Code for now.
 - `gh`, logged in as someone who can read the project's Dependabot alerts and push branches.
   Check with `gh api 'repos/<owner>/<repo>/dependabot/alerts?per_page=1'`.
 - Whatever the project needs to recompile its requirements and build: pip-tools for
@@ -58,6 +59,26 @@ cd path/to/<project>
 claude --add-dir path/to/mason
 ```
 
+With **Codex**, link the skills once, into `~/.agents/skills`, where Codex finds them from any
+project, then launch from the project with this repository added, so the run can write its
+files under `runs/`:
+
+```sh
+path/to/mason/bin/link-skills
+cd path/to/<project>
+codex --add-dir path/to/mason
+```
+
+`bin/link-skills` makes one symlink per skill, so a `git pull` here updates them; run it again
+after a new skill is added, and `--remove` takes the links away. It leaves alone anything
+already at a skill's name. A project's own skill with the same name as one here (`code-review`
+is a likely one) is listed beside it, not replaced: name the one you mean (`$code-review` in
+Codex shows both), or use the next way in.
+
+**Any other agent,** or to be sure which skill runs: name the skill's file.
+"Read path/to/mason/skills/dependency-upgrades/SKILL.md and follow it for this project." The
+skills find this repository and the project by path, so nothing else needs installing.
+
 Then ask for "run the dependency upgrades", "review PR #42", "fix the Sentry errors", or a
 retrospective ("run the dependency retrospective", "run the code review retrospective", "run
 the Sentry retrospective"). The upgrade run tells you what
@@ -78,7 +99,7 @@ A workflow that acts on one pull request takes it with `--pr`:
 path/to/mason/bin/unattended code-review path/to/<project> --pr 42
 ```
 
-This runs Claude Code headless from the project. The run:
+This runs Claude Code headless from the project (Codex isn't supported here yet). The run:
 - **Asks nothing.** Everything that needed a person is listed in its report.
 - **Uses only the tools the workflow needs.** Anything else is refused, and merging is always
   refused.
