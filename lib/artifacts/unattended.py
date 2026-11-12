@@ -1,7 +1,7 @@
 """Start a workflow with nobody watching: from cron, a systemd timer, CI, or another agent.
 
 It runs Claude Code headless (`claude -p`) from the project, with this repository added, the
-skill told it is unattended (`AUTOMATION_UNATTENDED=1`), and permissions that allow only what
+skill told it is unattended (`MASON_UNATTENDED=1`), and permissions that allow only what
 the workflow needs. Before starting, it runs `artifact doctor` offline, so a missing tool, login,
 token or uv environment stops the run with a clear message before any session starts. Anything else is refused rather than asked about (`--permission-mode
 dontAsk`), because nobody is there to answer. The session's output goes to a log under `runs/`.
@@ -191,7 +191,7 @@ def environment(trigger: str, base: dict[str, str] | None = None) -> dict[str, s
         venv_bin = str(Path(venv) / 'bin')
         paths = [path for path in env.get('PATH', '').split(os.pathsep) if path != venv_bin]
         env['PATH'] = os.pathsep.join(paths)
-    env.update(AUTOMATION_UNATTENDED='1', AUTOMATION_TRIGGER=trigger, UV_OFFLINE='1')
+    env.update(MASON_UNATTENDED='1', MASON_TRIGGER=trigger, UV_OFFLINE='1')
     return env
 
 

@@ -2,7 +2,7 @@
 
 Each function reads only what git tracks (plus the project's own `.env`), and returns nothing
 rather than guessing when the repository doesn't say. A value that can't be detected has to be
-set in `.agents/automation.toml`; `project.resolve` reports which.
+set in the project's `mason.toml`; `project.resolve` reports which.
 """
 
 import json
@@ -120,6 +120,16 @@ def worktree_copy(project: Path) -> list[str]:
     if (project / '.env').is_file() and _git(project, 'check-ignore', '-q', '.env') is not None:
         return ['.env']
     return []
+
+
+# Where a project keeps its own coding conventions, for people and agents alike.
+CONVENTIONS_PATHS = ('docs/conventions.md', 'CONVENTIONS.md', 'docs/CONVENTIONS.md')
+
+
+def conventions(files: list[str]) -> list[str]:
+    """The project's conventions document, if it has one at a usual path."""
+    tracked = set(files)
+    return [path for path in CONVENTIONS_PATHS if path in tracked]
 
 
 def ci_config(files: list[str]) -> str | None:

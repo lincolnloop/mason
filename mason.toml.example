@@ -1,12 +1,17 @@
-# A project's .agents/automation.toml, with every key set, for an example project.
+# mason.toml: mason's settings for one project, at the project's root. Copy this file there,
+# keep `version`, and delete every section and key you don't need to change.
 #
-# The file is optional, and so is every key in it. A key the file leaves out is detected from the
+# Adding the file is how a project adopts mason, but it is optional, and so is every key in it. A key the file leaves out is detected from the
 # repository (the GitHub remote, origin/HEAD, compiled requirements headers, tracked npm
 # lockfiles, an ignored .env) or defaulted. So a project only needs the file once a value has to
 # differ, and then only the keys that differ. To see what a project resolves to, and where each
 # value came from, as a starting file:
 #   uv run --project path/to/mason --locked python -I path/to/mason/bin/artifact config <project dir> --toml
 # tests/test_project.py validates this file.
+
+# The version of this file's format. Required: a later mason that changes the format refuses an
+# older file and says how to update it, rather than misreading it.
+version = 1
 
 [repo]
 name = 'example-org/example-app'
@@ -52,8 +57,11 @@ fix_within_days_low = 90
 stale_after_months = 24
 
 [code-review]
-# The project's own knowledge skills the review loads, e.g. its conventions and framework rules.
-knowledge = ['project-conventions']
+# The project's own conventions: documents in the repository, read as its rules (at the PR's
+# base). Detected from docs/conventions.md or CONVENTIONS.md.
+conventions = ['docs/conventions.md']
+# Knowledge skills installed in the project the review also loads, e.g. framework rules.
+knowledge = ['django-development']
 # Findings posted as inline comments on the diff: 'none' (one consolidated comment), 'suggestions'
 # (only findings with a suggested replacement, so they can be applied), or 'all'.
 inline = 'none'

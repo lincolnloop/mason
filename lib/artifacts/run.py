@@ -80,13 +80,13 @@ def start(
 ) -> tuple[Path, dict[str, Any]]:
     """Create the run's directory and write its record. Returns (directory, record).
 
-    `started_by` is `AUTOMATION_TRIGGER` when the launcher sets it (a timer, another agent),
+    `started_by` is `MASON_TRIGGER` when the launcher sets it (a timer, another agent),
     otherwise the GitHub login of an interactive user.
     """
     env = os.environ if env is None else env
     now = now or datetime.now(UTC)
-    unattended = env.get('AUTOMATION_UNATTENDED') == '1'
-    started_by = env.get('AUTOMATION_TRIGGER') or (
+    unattended = env.get('MASON_UNATTENDED') == '1'
+    started_by = env.get('MASON_TRIGGER') or (
         'an unattended run' if unattended else (login or github_login() or 'unknown')
     )
     run_id = f'{now:%Y%m%d-%H%M%S}-{workflow}'

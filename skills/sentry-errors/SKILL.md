@@ -26,7 +26,7 @@ is refused; every command here that saves a file does it with its own option.
 ## Modes, trust and privacy
 
 - **Interactive** by default; **unattended** when the request says so or
-  `AUTOMATION_UNATTENDED=1` is set. Unattended, ask nothing: list what needed a person in the
+  `MASON_UNATTENDED=1` is set. Unattended, ask nothing: list what needed a person in the
   report.
 - **Sentry is read through `artifact sentry-issues` and `artifact sentry-event`,** which use
   `SENTRY_AUTH_TOKEN` and strip personal data (users, IPs, request data, cookies, email
@@ -51,7 +51,7 @@ is refused; every command here that saves a file does it with its own option.
 
 1. Read the configuration and stop if it is refused:
    `artifact config $PROJECT --section sentry-errors`. The Sentry org and project must be in
-   `.agents/automation.toml`; nothing can detect them. Read `$PROJECT/AGENTS.md`.
+   `mason.toml`; nothing can detect them. Read `$PROJECT/AGENTS.md`.
 2. `artifact lock acquire $PROJECT sentry-errors`, and stop if it is refused. Release it in
    Step 9 on every path out.
 3. `artifact run-start $PROJECT sentry-errors`. `RUN` is the printed `dir`; `branch` is this

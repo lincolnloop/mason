@@ -31,8 +31,8 @@ is refused; every command here that saves a file does it with its own option (`-
 ## Modes
 
 - **Interactive** (the default): a person is there to answer questions.
-- **Unattended:** the request says "unattended", or `AUTOMATION_UNATTENDED=1` is set in the
-  environment (check with `echo $AUTOMATION_UNATTENDED`). Nobody is there to answer, so:
+- **Unattended:** the request says "unattended", or `MASON_UNATTENDED=1` is set in the
+  environment (check with `echo $MASON_UNATTENDED`). Nobody is there to answer, so:
   - Ask nothing. Where this skill says *ask* or *confirm first*, don't do the action; list it
     under "Needs a person" in the report (Step 9).
   - Where it says *stop*, write the report saying why, and end.
@@ -58,7 +58,7 @@ is refused; every command here that saves a file does it with its own option (`-
    ```sh
    artifact config $PROJECT --section dependency-upgrades
    ```
-   The project doesn't need a `.agents/automation.toml`. Any value the file leaves out is
+   The project doesn't need a `mason.toml`. Any value the file leaves out is
    detected from the repository or defaulted, and `sources` in the output says which. Tell the
    person which values were detected or defaulted, in one line. If they want one changed,
    `artifact config $PROJECT --toml` prints a starting file to edit and commit. Don't create

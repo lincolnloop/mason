@@ -10,7 +10,7 @@ from artifacts import detect, project
 
 from . import ROOT
 
-EXAMPLE = ROOT / 'docs' / 'config.example.toml'
+EXAMPLE = ROOT / 'mason.toml.example'
 SCRIPT = ROOT / 'bin' / 'artifact'
 
 COMPILED = """#
@@ -26,6 +26,7 @@ django==5.2.8
 
 def example(**overrides: object) -> dict:
     base = tomllib.loads(EXAMPLE.read_text(encoding='utf-8'))
+    base.pop('version')  # read_file checks it and removes it before the contents are checked
     for key, value in overrides.items():
         if value is ...:
             base.pop(key)
@@ -35,6 +36,10 @@ def example(**overrides: object) -> dict:
 
 
 class FileCheckTests(unittest.TestCase):
+    def test_example_states_the_current_version(self) -> None:
+        text = EXAMPLE.read_text(encoding='utf-8')
+        self.assertEqual(tomllib.loads(text)['version'], project.CONFIG_VERSION)
+
     def test_example_is_complete(self) -> None:
         self.assertEqual(project.check(example(), tuple(project.SECTIONS)), [])
 
@@ -161,8 +166,8 @@ class ResolveTests(unittest.TestCase):
 
     def test_file_wins_key_by_key(self) -> None:
         self.write(
-            '.agents/automation.toml',
-            '[limits]\nopen_agent_prs = 1\n\n[dependency-upgrades]\nnpm_projects = []\n',
+            'mason.toml',
+            'version = 1\n[limits]\nopen_agent_prs = 1\n\n[dependency-upgrades]\nnpm_projects = []\n',
         )
         resolved = project.resolve(self.repo)
         self.assertEqual(resolved.config['limits'], {'open_agent_prs': 1, 'stale_after_days': 14})
@@ -172,7 +177,7 @@ class ResolveTests(unittest.TestCase):
         self.assertEqual(upgrades['pip_requirements'], ['requirements/base.txt'])
 
     def test_a_bad_file_is_still_an_error(self) -> None:
-        self.write('.agents/automation.toml', '[limits]\nopen_agnet_prs = 1\n')
+        self.write('mason.toml', 'version = 1\n[limits]\nopen_agnet_prs = 1\n')
         with self.assertRaisesRegex(project.ConfigError, 'open_agnet_prs: is not a known field'):
             project.resolve(self.repo)
 
@@ -209,15 +214,46 @@ class ResolveTests(unittest.TestCase):
         )
 
     def test_toml_is_a_valid_starting_file(self) -> None:
-        self.write('.agents/automation.toml', '[limits]\nopen_agent_prs = 1\n')
+        self.write('mason.toml', 'version = 1\n[limits]\nopen_agent_prs = 1\n')
         text = project.to_toml(project.resolve(self.repo))
         self.assertIn('# stale_after_days = 14', text)
-        self.assertEqual(tomllib.loads(text)['limits'], {'open_agent_prs': 1})
+        parsed = tomllib.loads(text)
+        self.assertEqual(parsed['limits'], {'open_agent_prs': 1})
+        self.assertEqual(parsed['version'], project.CONFIG_VERSION)
         uncommented = text.replace('# pip_compile = ', 'pip_compile = ')
         self.assertEqual(
             tomllib.loads(uncommented)['dependency-upgrades']['pip_compile'],
             'pip-compile requirements/base.in',
         )
+        # The starting file it prints is itself a valid file.
+        self.write('mason.toml', text)
+        project.resolve(self.repo)
+
+    def test_a_file_without_a_version_is_refused(self) -> None:
+        self.write('mason.toml', '[limits]\nopen_agent_prs = 1\n')
+        with self.assertRaisesRegex(project.ConfigError, 'has no `version`.*Set `version = 1`'):
+            project.resolve(self.repo)
+
+    def test_an_unknown_version_is_refused(self) -> None:
+        for value in ('2', "'1'", '0'):
+            self.write('mason.toml', f'version = {value}\n')
+            with self.assertRaisesRegex(project.ConfigError, 'this mason reads version 1'):
+                project.resolve(self.repo)
+
+    def test_the_old_file_name_is_refused_with_how_to_move_it(self) -> None:
+        self.write('.agents/automation.toml', '[limits]\nopen_agent_prs = 1\n')
+        with self.assertRaisesRegex(
+            project.ConfigError, 'now reads mason.toml at the project root'
+        ):
+            project.resolve(self.repo)
+
+    def test_conventions_document_is_detected(self) -> None:
+        self.assertEqual(project.resolve(self.repo).config['code-review']['conventions'], [])
+        self.write('docs/conventions.md', '# Conventions\n')
+        self.git('add', 'docs/conventions.md')
+        resolved = project.resolve(self.repo)
+        self.assertEqual(resolved.config['code-review']['conventions'], ['docs/conventions.md'])
+        self.assertTrue(resolved.sources[('code-review', 'conventions')].startswith('detected: '))
 
     def test_cli(self) -> None:
         command = [sys.executable, '-I', str(SCRIPT), 'config', str(self.repo)]

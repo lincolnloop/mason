@@ -31,8 +31,8 @@ machine that ran it:
 | Field | Meaning |
 |---|---|
 | `id` | `<UTC stamp>-<workflow>`. Also names the run's directory and its branch. |
-| `trigger` | `interactive` (a person in a session) or `unattended` (`AUTOMATION_UNATTENDED=1`). |
-| `started_by` | `AUTOMATION_TRIGGER` if the launcher set it (`bin/unattended --trigger`), otherwise the GitHub login of the person running it. |
+| `trigger` | `interactive` (a person in a session) or `unattended` (`MASON_UNATTENDED=1`). |
+| `started_by` | `MASON_TRIGGER` if the launcher set it (`bin/unattended --trigger`), otherwise the GitHub login of the person running it. |
 | `host` | The machine that ran it, so its log under `runs/` can be found. |
 | `started_at` | When the run started, in UTC. |
 | `outcome` | Set when the record is published: `pr_opened` (the PR carrying it is the run's), or `stopped_pr_open`. Absent while the run is in progress. |

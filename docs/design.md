@@ -149,7 +149,7 @@ recurring.
 - **Interactively:** from the project, `claude --add-dir path/to/mason`, then "run the
   dependency upgrades". The skill asks before anything marked *confirm first*.
 - **Unattended:** `bin/unattended dependency-upgrades <project>`, for a scheduler or another
-  agent. It runs Claude Code headless with `AUTOMATION_UNATTENDED=1`, and with permissions that
+  agent. It runs Claude Code headless with `MASON_UNATTENDED=1`, and with permissions that
   allow only what the workflow needs. Anything else is refused, not asked about. The skill asks
   nothing. It lists what needed a person in its report, leaves the tests to CI when it can't
   run them locally (`verify.ci`), and opens a draft when it can't verify at all.
@@ -176,8 +176,11 @@ starts soon after an alert opens. The cost of a run with nothing to do is small:
 Skills get every project value from `artifact config <project>`, never from their own text. It
 resolves each key in turn from:
 
-1. **The project's `.agents/automation.toml`, if it sets the key.** The file is optional. An
-   empty list counts as set, so `npm_projects = []` turns npm off.
+1. **The project's `mason.toml`, at its root, if it sets the key.** Adding the file is how a
+   project adopts mason, as a project adds `.pre-commit-config.yaml` to adopt pre-commit, but it
+   is optional. An empty list counts as set, so `npm_projects = []` turns npm off. The file
+   states its format's `version`. A mason that reads a different version refuses the file, and
+   says how to update it, rather than misreading it.
 2. **The repository, where it says:**
    - `repo.name` from the GitHub origin remote;
    - `main_branch` from origin/HEAD;
@@ -186,7 +189,9 @@ resolves each key in turn from:
    - npm from tracked `package-lock.json` files, with `npm run build` where a `build` script
      exists;
    - `worktree_copy` from an untracked, ignored `.env`;
-   - `verify.ci` from `.circleci/config.yml` or `.github/workflows/`.
+   - `verify.ci` from `.circleci/config.yml` or `.github/workflows/`;
+   - `code-review.conventions` from a tracked `docs/conventions.md` or `CONVENTIONS.md`: the
+     project's own rules, as a document any person or agent can read.
 3. **A default, where one is safe:**
    - three open agent PRs;
    - 14 days before stale;
@@ -205,8 +210,8 @@ The test command has no safe guess. If it isn't configured, the agent takes it f
 project's `AGENTS.md` and records in the change that it chose it rather than read it from config.
 
 Within the file every key is checked and unknown keys are errors, so a typo is refused rather
-than silently replaced by a detected value. `docs/config.example.toml` has every key, filled in
-for an example project.
+than silently replaced by a detected value. `mason.toml.example` has every key, filled in for
+an example project, to copy and edit.
 
 ## 6. Autonomy
 

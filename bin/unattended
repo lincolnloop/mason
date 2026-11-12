@@ -47,7 +47,7 @@ def main() -> int:
     except ValueError as exc:
         parser.error(str(exc))
     if args.dry_run:
-        env = f'AUTOMATION_UNATTENDED=1 AUTOMATION_TRIGGER={shlex.quote(args.trigger)} UV_OFFLINE=1'
+        env = f'MASON_UNATTENDED=1 MASON_TRIGGER={shlex.quote(args.trigger)} UV_OFFLINE=1'
         print(f'cd {shlex.quote(str(args.project))} && {env} {shlex.join(command)}')
         return 0
     check = subprocess.run(

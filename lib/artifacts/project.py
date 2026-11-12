@@ -1,6 +1,6 @@
-"""A consuming project's configuration: `.agents/automation.toml`, over detected values and defaults.
+"""A consuming project's configuration: `mason.toml` at its root, over detected values and defaults.
 
-The file is optional. Every value a skill reads comes from, in order:
+Adding the file is how a project adopts mason, though it is optional: a skill runs without it. Every value a skill reads comes from, in order:
 
 1. the file, if it sets the key (an empty list counts: it turns detection off);
 2. the repository, where it says (`detect.py`): the GitHub remote, origin/HEAD, compiled
@@ -10,7 +10,8 @@ The file is optional. Every value a skill reads comes from, in order:
 So a skill can run in a new repository straight away, and the file is added once a value needs
 to differ. Within the file every key is checked and unknown keys are errors, so a typo can't
 silently fall back to a detected value. A value that is required but can't be worked out is an
-error naming the key to set.
+error naming the key to set. The file states the version of its format (`version = 1`), so a
+format change can refuse an old file with instructions rather than misread it.
 """
 
 import json
@@ -22,7 +23,15 @@ from typing import Any
 from . import detect
 from ._check import REPO_PATTERN, Checker
 
-CONFIG_PATH = Path('.agents') / 'automation.toml'
+CONFIG_PATH = Path('mason.toml')
+# Where the file used to be, before it was named for mason. Found there, it is refused with how
+# to move it, rather than silently ignored.
+OLD_CONFIG_PATH = Path('.agents') / 'automation.toml'
+# The format this version of mason reads. Bump it, and say how to update in UPGRADE_HINTS, when a
+# change would make an existing file mean something different.
+CONFIG_VERSION = 1
+UPGRADE_HINTS: dict[int, str] = {}
+EXAMPLE = 'mason.toml.example in the mason repository'
 
 # section -> {key: (kind, required)}; kind is 'str', 'bool', 'int', or 'list' (of strings).
 # `required` applies to the resolved value, never to the file.
@@ -44,8 +53,10 @@ SECTIONS: dict[str, dict[str, tuple[str, bool]]] = {
         'verify': ('list', False),
     },
     'code-review': {
-        # The project's own knowledge skills to load, e.g. its conventions or framework rules.
+        # The project's own knowledge skills to load, e.g. framework rules.
         'knowledge': ('list', True),
+        # The project's own conventions: documents in the repository, read as its rules.
+        'conventions': ('list', True),
         # Which findings are posted as inline comments: none, suggestions, or all.
         'inline': ('str', True),
     },
@@ -94,7 +105,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     },
     'dependency-upgrades': {'pip_requirements': [], 'pip_sources': [], 'npm_projects': []},
     # One consolidated review comment; inline comments only when a project asks for them.
-    'code-review': {'knowledge': [], 'inline': 'none'},
+    'code-review': {'knowledge': [], 'conventions': [], 'inline': 'none'},
     'code-review-retrospective': {'period_days': 30},
     # The org and project can't be detected: they are set in the file.
     'sentry-errors': {
@@ -120,7 +131,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
 
 HINT = (
     'Values the file leaves out are detected from the repository or defaulted. Set the ones '
-    f"that can't be in {CONFIG_PATH} (see docs/config.example.toml)."
+    f"that can't be in {CONFIG_PATH} (every key is in {EXAMPLE})."
 )
 
 
@@ -144,9 +155,27 @@ def read_file(project: Path) -> tuple[dict[str, Any], bool]:
         with path.open('rb') as handle:
             config = tomllib.load(handle)
     except FileNotFoundError:
+        old = project / OLD_CONFIG_PATH
+        if old.exists():
+            raise ConfigError(
+                f'{old}: mason now reads {CONFIG_PATH} at the project root. Move the file there '
+                f'and add `version = {CONFIG_VERSION}` as its first setting.'
+            ) from None
         return {}, False
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f'{path}: is not valid TOML: {exc}') from exc
+    version = config.pop('version', None)
+    if version != CONFIG_VERSION:
+        if version is None:
+            problem = 'has no `version`'
+        elif isinstance(version, int) and version < CONFIG_VERSION:
+            problem = f'is version {version}. {UPGRADE_HINTS.get(version, "")}'.rstrip()
+        else:
+            problem = f'has version {version!r}, which this mason does not read'
+        raise ConfigError(
+            f'{path}: {problem}; this mason reads version {CONFIG_VERSION}. Set '
+            f'`version = {CONFIG_VERSION}` as the first setting (see {EXAMPLE}).'
+        )
     errors = check(config)
     if errors:
         raise ConfigError(
@@ -167,6 +196,8 @@ def detected(project: Path) -> dict[str, dict[str, tuple[Any, str]]]:
         found['verify']['worktree_copy'] = (copy, 'an untracked .env that git ignores')
     if ci := detect.ci_config(files):
         found['verify']['ci'] = (True, f'{ci} runs on pull requests')
+    if conventions := detect.conventions(files):
+        found['code-review'] = {'conventions': (conventions, 'a tracked conventions document')}
     how = {
         'pip_requirements': 'tracked .txt files with a pip-compile header',
         'pip_sources': 'the .in file beside each compiled file',
@@ -276,13 +307,14 @@ def check(config: dict[str, Any], required_sections: tuple[str, ...] = ()) -> li
 
 
 def to_toml(resolved: Resolved) -> str:
-    """The resolved configuration as a starting `.agents/automation.toml`.
+    """The resolved configuration as a starting `mason.toml`.
 
     Values from the file are written as they are. Detected and default values are commented
     out with where they came from, so uncommenting a line is how a value gets pinned."""
     lines = [
         f'# {CONFIG_PATH}: values the file sets are live; commented-out values are what was',
         '# detected or defaulted, shown so one can be uncommented and changed.',
+        f'version = {CONFIG_VERSION}',
     ]
     for section, values in resolved.config.items():
         lines += ['', f'[{section}]']

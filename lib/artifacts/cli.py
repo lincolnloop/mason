@@ -215,7 +215,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cmd = commands.add_parser(
         'config',
-        help="print a project's configuration as JSON: .agents/automation.toml, over values "
+        help="print a project's configuration as JSON: mason.toml, over values "
         'detected from the repository and defaults',
     )
     cmd.add_argument('project', type=Path, nargs='?', default=Path('.'), help='project root')
@@ -223,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument(
         '--toml',
         action='store_true',
-        help='print everything as a starting automation.toml, with where each value came from',
+        help='print everything as a starting mason.toml, with where each value came from',
     )
 
     commands.add_parser('version', help="this repository's commit, for produced_by.automation_sha")

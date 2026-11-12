@@ -65,8 +65,8 @@ class UnattendedTests(unittest.TestCase):
             env,
             {
                 'PATH': '/bin',
-                'AUTOMATION_UNATTENDED': '1',
-                'AUTOMATION_TRIGGER': 'timer',
+                'MASON_UNATTENDED': '1',
+                'MASON_TRIGGER': 'timer',
                 'UV_OFFLINE': '1',
             },
         )
@@ -91,7 +91,7 @@ class UnattendedTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as hub, tempfile.TemporaryDirectory() as project:
             code = (
                 'import os; e = os.environ; '
-                'print(e["AUTOMATION_UNATTENDED"], e["AUTOMATION_TRIGGER"], e["UV_OFFLINE"])'
+                'print(e["MASON_UNATTENDED"], e["MASON_TRIGGER"], e["UV_OFFLINE"])'
             )
             args = [sys.executable, '-c', code]
             status, log = unattended.run(
@@ -118,7 +118,7 @@ class UnattendedTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(
-                'AUTOMATION_UNATTENDED=1 AUTOMATION_TRIGGER=bin/unattended UV_OFFLINE=1 claude -p',
+                'MASON_UNATTENDED=1 MASON_TRIGGER=bin/unattended UV_OFFLINE=1 claude -p',
                 result.stdout,
             )
 

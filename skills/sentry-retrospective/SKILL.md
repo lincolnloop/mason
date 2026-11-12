@@ -28,7 +28,7 @@ commands. Unattended, a command that uses or assigns a shell variable, or redire
 is refused; every command here that saves a file does it with its own option.
 
 **Modes and privacy.** As in `sentry-errors`: interactive by default, unattended when the
-request says so or `AUTOMATION_UNATTENDED=1` is set; Sentry is read only through `artifact`;
+request says so or `MASON_UNATTENDED=1` is set; Sentry is read only through `artifact`;
 no personal data goes into GitHub.
 
 ## Autonomy
@@ -93,7 +93,7 @@ fix whose failure the method clearly caused. It must hold for any project.
 Read this period's findings, from the fix PRs and the triage issues, across runs:
 - **The same class of error, in different places:** a missing guard pattern, an unchecked
   lookup, an N+1 in the same kind of view. The fix belongs at the source: a rule for writing
-  code in the project's own knowledge, or `AGENTS.md`; a test pattern; a check its review
+  code in the project's own conventions or knowledge, or `AGENTS.md`; a test pattern; a check its review
   should make. Write it as an `investigate` finding, `fingerprint: rules/<slug>`, giving the
   rule as it should be written, and the fixes that show it.
 - **Diagnostics gaps that keep costing time:** errors that were hard to diagnose because of how

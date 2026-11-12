@@ -54,9 +54,10 @@ Then:
    uv run --project path/to/mason --locked python -I path/to/mason/bin/artifact \
      config path/to/<project> --section dependency-upgrades
    ```
-   To change a value, `--toml` prints a starting `.agents/automation.toml` for the project:
-   uncomment the lines to change, and commit the file there. `docs/config.example.toml` has every
-   key.
+   To change a value, or to record that the project has adopted mason, add a `mason.toml` at the
+   project's root and commit it there. Either copy `mason.toml.example` (every key, for an
+   example project) and keep only what differs, or start from `--toml`, which prints this
+   project's detected values commented out, ready to uncomment.
 4. **Create the label** the workflow's PRs carry. It is how open agent PRs are counted:
    ```sh
    gh label create automation --repo <owner>/<repo> --description 'Opened by an agent workflow'
@@ -131,7 +132,7 @@ Give the `gh` login no more than it needs: reading alerts, pushing branches, ope
 **Tokens** live in one file outside every repository, `~/.config/mason/env`, as `KEY=value`
 lines with `chmod 600`. The systemd unit reads it with `EnvironmentFile`; for an interactive run,
 load it only for that session: `(set -a; . ~/.config/mason/env; set +a; claude --add-dir …)`.
-Never put a token in `.agents/automation.toml` (it is committed) or in the project's `.env`
+Never put a token in `mason.toml` (it is committed) or in the project's `.env`
 (it is copied into every run's worktree). Anything in the session's environment can be read by
 the session, so give each token only the scopes the workflows use.
 
@@ -202,11 +203,17 @@ pyproject.toml, uv.lock     the Python environment uv runs every script in, and 
 tests/                      stdlib unittest; the schema pages' examples are tests too
 docs/design.md              principles, steps and hand-offs, autonomy, distribution
 docs/method.md              the checks the workflow makes, and why
-docs/config.example.toml    a project's .agents/automation.toml with every key set
+mason.toml.example          a project's mason.toml with every key set, to copy and edit
 runs/                       per-run worktrees, artifacts and logs (gitignored)
 ```
 
 ## What stays in each project
 
-- Its `AGENTS.md`, which the skill reads for the project's own rules.
-- Optionally, `.agents/automation.toml`, for any value that differs from what is detected.
+Nothing of mason is copied into a project. What a project holds is its own:
+
+- `AGENTS.md`, which the skills read for the project's commands and rules.
+- Optionally, a conventions document (`docs/conventions.md` is detected), which code review
+  reads as the project's own rules.
+- Optionally, `mason.toml` at its root: adopting mason, and any value that differs from what is
+  detected. It states its format's `version`, so a later mason that changes the format refuses
+  it with how to update, rather than misreading it.

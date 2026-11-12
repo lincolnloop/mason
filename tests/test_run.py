@@ -76,12 +76,12 @@ class StartTests(unittest.TestCase):
         self.assertEqual(run.validate(saved), [])
 
     def test_unattended_run_names_its_trigger(self) -> None:
-        env = {'AUTOMATION_UNATTENDED': '1', 'AUTOMATION_TRIGGER': 'systemd timer'}
+        env = {'MASON_UNATTENDED': '1', 'MASON_TRIGGER': 'systemd timer'}
         _, record = self.start(env)
         self.assertEqual((record['trigger'], record['started_by']), ('unattended', 'systemd timer'))
 
     def test_unattended_without_a_named_trigger(self) -> None:
-        _, record = self.start({'AUTOMATION_UNATTENDED': '1'})
+        _, record = self.start({'MASON_UNATTENDED': '1'})
         self.assertEqual(record['started_by'], 'an unattended run')
 
 
