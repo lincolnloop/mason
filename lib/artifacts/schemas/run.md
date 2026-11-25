@@ -16,11 +16,10 @@ machine that ran it:
 {
   "schema": "run/1",
   "project": "example-org/example-app",
-  "produced_by": {"skill": "dependency-upgrades", "automation_sha": "889bd9b0000000000000000000000000000000aa"},
+  "produced_by": {"skill": "dependency-upgrades", "automation_sha": "889bd9b0000000000000000000000000000000aa", "mason_version": "0.2.0", "skill_version": "3.0.0"},
   "id": "20261111-093000-dependency-upgrades",
   "trigger": "unattended",
   "started_by": "systemd timer dependency-upgrades.timer",
-  "host": "factory-1",
   "started_at": "2026-11-11T09:30:00Z",
   "outcome": "stopped_pr_open",
   "pr": 42,
@@ -32,10 +31,10 @@ machine that ran it:
 |---|---|
 | `id` | `<UTC stamp>-<workflow>`. Also names the run's directory and its branch. |
 | `trigger` | `interactive` (a person in a session) or `unattended` (`MASON_UNATTENDED=1`). |
-| `started_by` | `MASON_TRIGGER` if the launcher set it (`bin/unattended --trigger`), otherwise the GitHub login of the person running it. |
-| `host` | The machine that ran it, so its log under `runs/` can be found. |
+| `started_by` | `MASON_TRIGGER` if the launcher set it (`mason run --trigger`), otherwise the GitHub login of the person running it. |
+| `host` | Optional, and only in the local record: the machine that ran it. It is left out of what is published, which names the tool (`produced_by`'s versions), not the machine. |
 | `started_at` | When the run started, in UTC. |
-| `outcome` | Set when the record is published: `pr_opened` (the PR carrying it is the run's), or `stopped_pr_open`. Absent while the run is in progress. |
+| `outcome` | Set when the record is published: `pr_opened`, `issue_opened`, `review_posted`, `assessed` or `report_published` (what carries it is the run's), or `stopped_pr_open`. Absent while the run is in progress. |
 | `pr`, `alerts_not_covered` | Only for `stopped_pr_open`: the open PR the run stopped for, and the open alerts that PR doesn't account for (not in its change, and not cited by its findings). |
 
 A run that finds nothing to do, or stops for another reason (another run holds the lock, the

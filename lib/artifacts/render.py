@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from . import deps
 from .embed import embed
+from .run import published
 
 GITHUB_BODY_LIMIT = 65_536
 
@@ -78,7 +79,7 @@ def review_comment(review: dict[str, Any], run: dict[str, Any], inline: Inline =
         # The setting it was posted with travels with it, for the retrospective to compare.
         embed({**review, 'inline': inline}),
         '',
-        embed({**run, 'outcome': 'review_posted'}, 'run.json'),
+        embed(published(run, 'review_posted'), 'run.json'),
     ]
     return _within_limit('\n'.join(lines) + '\n', 'review comment')
 
@@ -212,7 +213,7 @@ def change_body(
     for artifact in (change, *findings, *not_in_this_pr):
         label = 'change.json' if artifact is change else f'finding {artifact["id"]}'
         lines += [embed(artifact, label), '']
-    lines += [embed({**run, 'outcome': 'pr_opened'}, 'run.json'), '']
+    lines += [embed(published(run, 'pr_opened'), 'run.json'), '']
     return _within_limit('\n'.join(lines), 'pull request body')
 
 
@@ -543,7 +544,7 @@ def retrospective_body(
     for artifact in (compact, *findings):
         label = 'outcomes.json' if artifact is compact else f'finding {artifact["id"]}'
         lines += [embed(artifact, label), '']
-    lines += [embed({**run, 'outcome': 'issue_opened'}, 'run.json'), '']
+    lines += [embed(published(run, 'issue_opened'), 'run.json'), '']
     return _within_limit('\n'.join(lines), 'issue body')
 
 
@@ -644,7 +645,7 @@ def assessment_body(
     ]
     for item in sorted(findings, key=lambda f: f['id']):
         lines += [embed(item, f'finding {item["id"]}'), '']
-    lines += [embed({**run, 'outcome': 'assessed'}, 'run.json'), '']
+    lines += [embed(published(run, 'assessed'), 'run.json'), '']
     return _within_limit('\n'.join(lines), 'issue body')
 
 
@@ -863,7 +864,7 @@ def dependency_report_body(report: dict[str, Any], run: dict[str, Any], notes: s
         '',
         embed(report, 'dependency-report.json'),
         '',
-        embed({**run, 'outcome': 'report_published'}, 'run.json'),
+        embed(published(run, 'report_published'), 'run.json'),
         '',
     ]
     return _within_limit('\n'.join(lines), 'report body')
@@ -1030,7 +1031,7 @@ def review_retrospective_body(
     for artifact in (compact, *findings):
         label = 'review-outcomes.json' if artifact is compact else f'finding {artifact["id"]}'
         lines += [embed(artifact, label), '']
-    lines += [embed({**run, 'outcome': 'issue_opened'}, 'run.json'), '']
+    lines += [embed(published(run, 'issue_opened'), 'run.json'), '']
     return _within_limit('\n'.join(lines), 'issue body')
 
 
@@ -1072,7 +1073,7 @@ def triage_body(environment: str, findings: list[dict[str, Any]], run: dict[str,
     lines += ['', f'<sub>Opened by {_run_line(run)}.</sub>', '']
     for finding in findings:
         lines += [embed(finding, f'finding {finding["id"]}'), '']
-    lines += [embed({**run, 'outcome': 'issue_opened'}, 'run.json'), '']
+    lines += [embed(published(run, 'issue_opened'), 'run.json'), '']
     return _within_limit('\n'.join(lines), 'issue body')
 
 
@@ -1128,7 +1129,7 @@ def sentry_retrospective_body(
     for artifact in (compact, *findings):
         label = 'sentry-outcomes.json' if artifact is compact else f'finding {artifact["id"]}'
         lines += [embed(artifact, label), '']
-    lines += [embed({**run, 'outcome': 'issue_opened'}, 'run.json'), '']
+    lines += [embed(published(run, 'issue_opened'), 'run.json'), '']
     return _within_limit('\n'.join(lines), 'issue body')
 
 
@@ -1204,8 +1205,7 @@ def stopped_comment(run: dict[str, Any], pr: int, missing: list[dict[str, Any]])
     else:
         lines.append('Every open alert is covered by this PR, or listed in it as left out.')
     record = {
-        **run,
-        'outcome': 'stopped_pr_open',
+        **published(run, 'stopped_pr_open'),
         'pr': pr,
         'alerts_not_covered': [a['number'] for a in missing],
     }
@@ -1220,10 +1220,15 @@ def _run_line(run: dict[str, Any]) -> str:
 def _run_details(run: dict[str, Any]) -> str:
     sha = run['produced_by']['automation_sha']
     sha = sha[:10] + (' with uncommitted changes' if sha.endswith('-dirty') else '')
-    return (
-        f'{run["started_by"]} ({run["trigger"]}) on {run["host"]} at {run["started_at"]}, '
-        f'mason {sha}'
+    produced_by = run['produced_by']
+    skill = produced_by['skill'] + (
+        f' {produced_by["skill_version"]}' if 'skill_version' in produced_by else ''
     )
+    if 'mason_version' in produced_by:
+        mason = f'mason {produced_by["mason_version"]} ({sha})'
+    else:
+        mason = f'mason {sha}'
+    return f'{run["started_by"]} ({run["trigger"]}) at {run["started_at"]}, {skill}, {mason}'
 
 
 # --- Helpers -----------------------------------------------------------------------------------

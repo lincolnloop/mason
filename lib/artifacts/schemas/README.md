@@ -27,7 +27,8 @@ Every artifact has:
   - `skill`: the skill that wrote it.
   - `automation_sha`: the commit of this repository it ran from, with `-dirty` appended for
     uncommitted changes.
-  - `model` (optional).
+  - `model`, `mason_version`, `skill_version` (optional): the model, and the versions of mason
+    and of the skill that wrote it. A run record has both versions.
 
 ## Validating
 

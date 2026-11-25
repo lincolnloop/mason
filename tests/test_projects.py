@@ -359,5 +359,37 @@ class CliTests(unittest.TestCase):
         self.assertIn('give --yes (and --workflow)', result.stderr)
 
 
+class ProjectArgumentTests(unittest.TestCase):
+    """Commands that take a project accept owner/name for mason's clone of it."""
+
+    def tearDown(self) -> None:
+        shutil.rmtree(paths.cache_home(), ignore_errors=True)
+
+    def mason(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, '-I', str(ROOT / 'bin' / 'artifact'), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_by_repository(self) -> None:
+        result = self.mason('config', REPO)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('o/app has no clone', result.stderr)
+        self.assertIn('mason project add o/app', result.stderr)
+        make_clone(REPO, paths.clone(REPO))
+        result = self.mason('config', REPO)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['repo']['name'], REPO)
+
+    def test_a_directory_still_wins(self) -> None:
+        from artifacts.cli import project_dir
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(project_dir(tmp), Path(tmp))
+        self.assertEqual(project_dir('.'), Path('.'))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -21,3 +21,5 @@ for variable, sub in (
     ('XDG_DATA_HOME', 'data'),
 ):
     os.environ[variable] = str(HOME / sub)
+# Skills installed with --global live under HOME (~/.claude/skills), so HOME is the same directory.
+os.environ['HOME'] = str(HOME)

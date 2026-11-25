@@ -23,6 +23,8 @@ install`) and the skills with `npx skills add -g` (`docs/packaging.md`), so:
   `../<name>/SKILL.md`, which is installed beside it.
 - **Nothing a developer keeps goes in a repository:** settings and run state live in their home
   directory (`lib/artifacts/paths.py`), never in a project or this checkout.
+- **Skills state the mason versions they work with** (`metadata.mason-requires`). A skill that
+  starts using a new command or field raises its lower bound in the same change.
 - **Every script has tests** beside it, covering malformed input as well as the happy path.
 
 Style: single quotes, 100-character lines, explicit type hints, ruff for lint and format

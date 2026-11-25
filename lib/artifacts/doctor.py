@@ -12,6 +12,8 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+from . import skills
+
 OK, WARN, FAIL = 'ok', 'warn', 'fail'
 
 Which = Callable[[str], str | None]
@@ -174,3 +176,25 @@ def render(checks: Sequence[Check]) -> str:
 
 def failed(checks: Sequence[Check]) -> bool:
     return any(check.status == FAIL for check in checks)
+
+
+def check_skills(
+    found: Sequence[skills.Skill], engine: str, workflow: str | None = None
+) -> list[Check]:
+    """Each installed workflow skill, and whether it works with this mason (`engine`)."""
+    if not found:
+        return [
+            Check(
+                'skills',
+                WARN,
+                'no workflow skills installed: `mason skills install <org>/mason@<tag>`',
+            )
+        ]
+    checks = []
+    for skill in found:
+        problem = skill.problem(engine)
+        detail = problem or f'{skill.version or "no version"}, in {skill.path.parent.parent}'
+        checks.append(Check(f'skill {skill.name}', FAIL if problem else OK, detail))
+    if workflow and not any(skill.name == workflow for skill in found):
+        checks.append(Check(f'skill {workflow}', WARN, 'not installed'))
+    return checks

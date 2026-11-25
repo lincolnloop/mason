@@ -7,6 +7,7 @@ Every command that reads an artifact validates it first and refuses to go on if 
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -36,10 +37,31 @@ from . import (
     runner,
     sentry,
     sentry_outcomes,
+    skills,
     validate,
     version,
     workspace,
 )
+
+REPO_NAME = re.compile(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+')
+PROJECT_HELP = "the project's root directory, or owner/name for mason's clone of it"
+
+
+def project_dir(value: str) -> Path:
+    """A project named by its directory, or by its GitHub repository: mason's clone of it
+    (`mason project add` makes it)."""
+    path = Path(value)
+    if path.exists() or not REPO_NAME.fullmatch(value):
+        return path
+    try:
+        clone = paths.clone(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    if not (clone / '.git').exists():
+        raise argparse.ArgumentTypeError(
+            f'{value} has no clone in {clone}: `mason project add {value}` makes one'
+        )
+    return clone
 
 
 class Refused(Exception):
@@ -61,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     cmd = commands.add_parser(
         'review-context', help='gather what code-review needs about a PR into a directory'
     )
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('--pr', type=int, required=True)
     cmd.add_argument('--dir', type=Path, required=True, help='the run directory to write into')
 
@@ -79,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         'collect-review-outcomes',
         help="what happened to code-review's findings over a period, as review-outcomes/1",
     )
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('--run', type=Path, required=True, help="the collecting run's run.json")
     cmd.add_argument(
         '--since', help='start of the period (ISO date or time); default period_days ago'
@@ -108,21 +130,21 @@ def main(argv: list[str] | None = None) -> int:
     cmd = commands.add_parser(
         'alerts', help="save a project's open Dependabot alerts, exactly as GitHub returns them"
     )
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('-o', '--output', type=Path, required=True)
 
     cmd = commands.add_parser(
         'open-findings',
         help='fingerprints of the findings already in open automation PRs and issues',
     )
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('-o', '--output', type=Path)
 
     cmd = commands.add_parser(
         'sentry-issues',
         help="a project's unresolved Sentry issues in one environment, without personal data",
     )
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('--environment', help='default: the first in [sentry-errors] environments')
     cmd.add_argument(
         '--details', type=int, default=25, help='fetch releases for the N most frequent'
@@ -132,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     cmd = commands.add_parser(
         'sentry-event', help="a Sentry issue's latest event, cut down to what explains the error"
     )
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('issue', help='the issue id, or its short id (e.g. EXAMPLE-1A2)')
     cmd.add_argument('--environment')
     cmd.add_argument('-o', '--output', type=Path, required=True)
@@ -148,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
     cmd = commands.add_parser(
         'collect-sentry-outcomes', help='whether the Sentry fixes worked, as sentry-outcomes/1'
     )
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('--run', type=Path, required=True, help="the collecting run's run.json")
     cmd.add_argument(
         '--since', help='start of the period (ISO date or time); default period_days ago'
@@ -177,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     cmd = commands.add_parser(
         'collect-outcomes', help="what happened to a workflow's PRs and the alerts, as outcomes/2"
     )
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('--run', type=Path, required=True, help="the collecting run's run.json")
     cmd.add_argument(
         '--since', help='start of the period (ISO date or time); default period_days ago'
@@ -206,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     cmd = commands.add_parser(
         'collect-report', help="a month's vulnerability figures, as dependency-report/1"
     )
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('--run', type=Path, required=True, help="the reporting run's run.json")
     cmd.add_argument(
         '--month', help='YYYY-MM; default the last complete month. The current month runs to now'
@@ -227,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
         'post-discussion',
         help='publish markdown as a new discussion; refuses a title the category already has',
     )
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('--category', required=True, help='the Discussions category, by name')
     cmd.add_argument('--title', required=True)
     cmd.add_argument('--body-file', type=Path, required=True)
@@ -235,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     cmd = commands.add_parser(
         'run-start', help="create a run's directory and record; prints dir, id and branch"
     )
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('workflow', help='e.g. dependency-upgrades')
 
     cmd = commands.add_parser('extract', help='print the artifacts embedded in markdown as JSON')
@@ -246,7 +268,7 @@ def main(argv: list[str] | None = None) -> int:
     cmd = commands.add_parser(
         'build-assessment', help='every open alert and its finding, as assessment/1'
     )
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('--run', type=Path, required=True, help="the run's run.json")
     cmd.add_argument('--alerts', type=Path, required=True, help='mason alerts output')
     cmd.add_argument('--findings', type=Path, nargs='*', default=[], help='the findings files')
@@ -304,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
         help="print a project's configuration as JSON: mason.toml, over values "
         'detected from the repository and defaults',
     )
-    cmd.add_argument('project', type=Path, nargs='?', default=Path('.'), help='project root')
+    cmd.add_argument('project', type=project_dir, nargs='?', default=Path('.'), help=PROJECT_HELP)
     cmd.add_argument('--section', help='check and print only this section (and the shared ones)')
     cmd.add_argument(
         '--toml',
@@ -410,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cmd = commands.add_parser('lock', help='take or release the one-run-at-a-time lock')
     cmd.add_argument('action', choices=('acquire', 'release'))
-    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('workflow', help='e.g. dependency-upgrades')
 
     args = parser.parse_args(argv)
@@ -838,7 +860,16 @@ def _run_start(args: argparse.Namespace) -> str:
         repo = project.load(args.project)['repo']['name']
     except project.ConfigError as exc:
         raise Refused(str(exc)) from exc
-    directory, record = run.start(paths.runs(repo), args.workflow, repo, _version(args).strip())
+    try:
+        skill = skills.check(args.workflow)
+    except skills.SkillError as exc:
+        raise Refused(str(exc)) from exc
+    versions = {'mason_version': version.package_version()}
+    if skill is not None and skill.version:
+        versions['skill_version'] = skill.version
+    directory, record = run.start(
+        paths.runs(repo), args.workflow, repo, _version(args).strip(), versions=versions
+    )
     branch = f'{args.workflow}-{record["id"].removesuffix("-" + args.workflow)}'
     return (
         json.dumps({'dir': str(directory), 'id': record['id'], 'branch': branch}, indent=2) + '\n'
@@ -983,6 +1014,11 @@ def _config(args: argparse.Namespace) -> str:
 def _doctor(args: argparse.Namespace) -> str:
     tokens = runner.WORKFLOWS[args.workflow].env if args.workflow else ()
     checks = doctor.run_checks(tokens, dict(os.environ), args.unattended)
+    try:
+        found = skills.installed()
+    except skills.SkillError as exc:
+        raise Refused(str(exc)) from exc
+    checks += doctor.check_skills(found, version.package_version(), args.workflow)
     report = doctor.render(checks)
     if doctor.failed(checks):
         raise Refused(report.rstrip('\n'))
@@ -1034,21 +1070,25 @@ def _run(args: argparse.Namespace) -> str:
             f'{repo} was archived on {archived_on}: `mason project archive {repo} --undo` to run '
             'it again'
         )
+    try:
+        skills.check(args.workflow)
+    except skills.SkillError as exc:
+        raise Refused(f'{exc}\n{args.workflow} not started') from exc
     if args.workflow not in enabled:
         raise Refused(
             f'{args.workflow} is not enabled for {repo}: add it to `enabled` under [workflows] '
             f'in {paths.settings(repo)}'
         )
-    state, skills = paths.project_state(repo), paths.skills_home()
+    state, skills_dir = paths.project_state(repo), paths.skills_home()
     if args.unattended:
         command = runner.command(
-            directory, state, args.workflow, tuple(args.allow), args.claude, args.pr, skills,
+            directory, state, args.workflow, tuple(args.allow), args.claude, args.pr, skills_dir,
             args.request,
         )  # fmt: skip
         env = runner.environment(args.trigger)
     else:
         command = runner.interactive_command(
-            directory, state, args.workflow, skills, args.claude, args.pr, args.request
+            directory, state, args.workflow, skills_dir, args.claude, args.pr, args.request
         )
         env = dict(os.environ)
     if args.dry_run:

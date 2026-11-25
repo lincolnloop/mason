@@ -82,16 +82,18 @@ useful without the engine at a matching version.
 
 ### 4.2 Compatibility
 
-Each workflow skill declares what it needs in its frontmatter:
+Each workflow skill declares the mason versions it works with in its frontmatter, under
+`metadata`, the open SKILL.md format's map of strings, so other agents ignore it:
 
 ```yaml
-requires:
-  mason: '>=0.6,<0.7'
-  schemas: [dependency-report/1, run/1]
+metadata:
+  mason-requires: '>=0.2,<0.3'
 ```
 
-`mason doctor`, and every `mason` command a skill runs, refuse an engine outside the range with
-the command to fix it, rather than failing partway through a run. Once the commands and schemas
+`mason doctor` checks every installed workflow skill. `mason run`, and `mason run-start` (the
+first command every workflow skill runs), refuse a skill whose range this mason is outside, with
+the command to fix it, rather than failing partway through a run. The range covers the schemas
+too: they ship with the engine. Once the commands and schemas
 are stable enough to state compatibility like this, the workflow pack could move to its own
 repository without anyone noticing.
 
@@ -209,11 +211,11 @@ mason run dependency-report --repo example-org/example-app --unattended # headle
 | `runs/` inside the mason checkout | `~/.local/state/mason/` | built |
 | `bin/link-skills` for Codex | `npx skills add -a codex` | built (removed) |
 | Worktrees of the developer's checkout | mason's own clone under `~/.cache/mason/repos/` (`mason run --repo`) | built |
-| Projects named by path | projects named `owner/repo` (`mason run --repo`) | built for `mason run`; the commands a skill calls still take the project's path |
+| Projects named by path | projects named `owner/repo` (`mason run --repo`; every command that takes a project) | built |
 | `bin/unattended` | `mason run --unattended` | built |
 | Skills installed for every session | `mason skills install`: for `mason run` sessions only, or `--global` | built |
-| Skills don't declare an engine version | `requires:` in each workflow skill, checked by `mason doctor` | not yet |
-| The published run record names the host and the person | published provenance is the tool and its version | not yet |
+| Skills don't declare an engine version | `metadata.mason-requires` in each workflow skill, checked by `mason doctor`, `mason run` and `run-start` | built |
+| The published run record names the host and the person | published provenance is the tool and its version: the skill's and mason's versions; the host stays local | built (the person or trigger that started it is still published) |
 
 ## 10. Open questions
 

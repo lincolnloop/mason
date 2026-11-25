@@ -75,11 +75,10 @@ directory (`deferred.json`), rather than only in the report's prose.
 
 ### Finishing the packaging
 
-- `requires:` in each workflow skill, checked by `mason doctor` and every command a skill runs
-  (`packaging.md` §4.2).
-- Published provenance names the tool and its version, not the host and the person
-  (`packaging.md` §8).
-- The commands skills call take `owner/repo` as well as a path (`packaging.md` §9).
+- `metadata.mason-requires` in each workflow skill, checked by `mason doctor`, `mason run` and
+  `run-start` (`packaging.md` §4.2; built).
+- Published provenance names the tool and its version, not the host (`packaging.md` §8; built).
+- The commands skills call take `owner/repo` as well as a path (`packaging.md` §9; built).
 
 ### Tidying for a release
 

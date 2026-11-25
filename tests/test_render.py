@@ -159,10 +159,12 @@ class ChangeBodyTests(unittest.TestCase):
         self.assertIn('gh api repos/example/project/dependabot/alerts/$n', body)
         self.assertIn(
             'Opened by run `20261111-093000-dependency-upgrades`, started by systemd timer '
-            '(unattended) on factory-1 at 2026-11-11T09:30:00Z',
+            '(unattended) at 2026-11-11T09:30:00Z, dependency-upgrades, mason aaaaaaaaaa.',
             body,
         )
-        self.assertEqual(embed.extract(body), [CHANGE, FINDING, {**RUN, 'outcome': 'pr_opened'}])
+        published = {k: v for k, v in RUN.items() if k != 'host'} | {'outcome': 'pr_opened'}
+        self.assertEqual(embed.extract(body), [CHANGE, FINDING, published])
+        self.assertNotIn('factory-1', body)  # the machine stays in the local record
 
     def test_check_left_to_ci(self) -> None:
         change = make(CHANGE, verified=[{'check': 'make test', 'result': 'ci'}])
@@ -283,6 +285,14 @@ class ChangeBodyTests(unittest.TestCase):
         )
         self.assertEqual(len(embed.extract(body, 'finding/1')), 4)
 
+    def test_the_skill_and_mason_versions_are_said(self) -> None:
+        versions = {'skill_version': '3.0.0', 'mason_version': '0.2.0'}
+        run = make(RUN, produced_by={**RUN['produced_by'], **versions})
+        self.assertIn(
+            'dependency-upgrades 3.0.0, mason 0.2.0 (aaaaaaaaaa)',
+            render.change_body(CHANGE, [FINDING], run),
+        )
+
     def test_uncommitted_automation_is_said(self) -> None:
         run = make(RUN, produced_by={**RUN['produced_by'], 'automation_sha': 'a' * 40 + '-dirty'})
         self.assertIn(
@@ -301,7 +311,8 @@ class StoppedCommentTests(unittest.TestCase):
         self.assertTrue(
             comment.startswith(
                 '**Run `20261111-093000-dependency-upgrades` stopped without changing this PR.**'
-                '\n\nStarted by systemd timer (unattended) on factory-1 at 2026-11-11T09:30:00Z'
+                '\n\nStarted by systemd timer (unattended) at 2026-11-11T09:30:00Z, '
+                'dependency-upgrades, mason aaaaaaaaaa'
             )
         )
         self.assertIn('2 open alerts are not covered by this PR (1 critical, 1 medium)', comment)

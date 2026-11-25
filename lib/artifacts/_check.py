@@ -174,7 +174,8 @@ def check_envelope(checker: Checker, artifact: Mapping[str, Any], schema: str) -
         artifact.get('project'), '$.project', pattern=REPO_PATTERN, pattern_hint='owner/repo'
     )
     produced_by = artifact.get('produced_by')
-    if checker.object(produced_by, '$.produced_by', ('skill', 'automation_sha'), ('model',)):
+    optional = ('model', 'mason_version', 'skill_version')
+    if checker.object(produced_by, '$.produced_by', ('skill', 'automation_sha'), optional):
         checker.string(produced_by.get('skill'), '$.produced_by.skill', pattern=SLUG_PATTERN)
         checker.string(
             produced_by.get('automation_sha'),
@@ -182,8 +183,9 @@ def check_envelope(checker: Checker, artifact: Mapping[str, Any], schema: str) -
             pattern=AUTOMATION_SHA_PATTERN,
             pattern_hint='a 40-character commit SHA of this repo, optionally ending in -dirty',
         )
-        if 'model' in produced_by:
-            checker.string(produced_by['model'], '$.produced_by.model')
+        for key in optional:
+            if key in produced_by:
+                checker.string(produced_by[key], f'$.produced_by.{key}', max_length=100)
 
 
 ENVELOPE_FIELDS = ('schema', 'project', 'produced_by')

@@ -26,12 +26,21 @@ TRIGGERS = ('interactive', 'unattended')
 # review_posted: this run's review of a PR does.
 # stopped_pr_open: an earlier upgrade PR is still open, so this run changed nothing, and the
 # record is a comment on that PR.
-OUTCOMES = ('pr_opened', 'issue_opened', 'review_posted', 'stopped_pr_open')
+# assessed: this run's assessment issue does. report_published: this run's discussion does.
+OUTCOMES = (
+    'pr_opened',
+    'issue_opened',
+    'review_posted',
+    'assessed',
+    'report_published',
+    'stopped_pr_open',
+)
 ID_PATTERN = re.compile(r'^\d{8}-\d{6}-[a-z0-9][a-z0-9-]*$')
 
-FIELDS = ('id', 'trigger', 'started_by', 'host', 'started_at')
+FIELDS = ('id', 'trigger', 'started_by', 'started_at')
 # Absent while the run is in progress; the renderer that publishes the record sets it.
-OPTIONAL = ('outcome', 'pr', 'alerts_not_covered')
+# host is kept in the local record only: what is published names the tool, not the machine.
+OPTIONAL = ('host', 'outcome', 'pr', 'alerts_not_covered')
 
 
 def validate(artifact: Any) -> list[str]:
@@ -44,7 +53,8 @@ def validate(artifact: Any) -> list[str]:
     )
     checker.choice(artifact.get('trigger'), '$.trigger', TRIGGERS)
     checker.string(artifact.get('started_by'), '$.started_by', max_length=200)
-    checker.string(artifact.get('host'), '$.host', max_length=200)
+    if 'host' in artifact:
+        checker.string(artifact['host'], '$.host', max_length=200)
     checker.timestamp(artifact.get('started_at'), '$.started_at')
     outcome = artifact.get('outcome')
     if 'outcome' in artifact:
@@ -68,6 +78,11 @@ def validate(artifact: Any) -> list[str]:
     return checker.errors
 
 
+def published(record: Mapping[str, Any], outcome: str) -> dict[str, Any]:
+    """The record as it is published, with its outcome: without the host, which stays local."""
+    return {**{k: v for k, v in record.items() if k != 'host'}, 'outcome': outcome}
+
+
 def start(
     runs_dir: Path,
     workflow: str,
@@ -76,12 +91,14 @@ def start(
     env: Mapping[str, str] | None = None,
     now: datetime | None = None,
     login: str | None = None,
+    versions: Mapping[str, str] | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Create the run's directory under `runs_dir` (`paths.runs(repo)`, in the developer's state
     directory) and write its record. Returns (directory, record).
 
     `started_by` is `MASON_TRIGGER` when the launcher sets it (a timer, another agent),
-    otherwise the GitHub login of an interactive user.
+    otherwise the GitHub login of an interactive user. `versions` adds `mason_version` and
+    `skill_version` to `produced_by`.
     """
     env = os.environ if env is None else env
     now = now or datetime.now(UTC)
@@ -93,7 +110,7 @@ def start(
     record = {
         'schema': SCHEMA,
         'project': repo,
-        'produced_by': {'skill': workflow, 'automation_sha': automation_sha},
+        'produced_by': {'skill': workflow, 'automation_sha': automation_sha, **(versions or {})},
         'id': run_id,
         'trigger': 'unattended' if unattended else 'interactive',
         'started_by': started_by[:200],
