@@ -530,6 +530,8 @@ def _worst(rows: list[dict[str, Any]]) -> int:
     return min((deps.SEVERITIES.index(r['severity']) for r in rows), default=len(deps.SEVERITIES))
 
 
+# --- Dependency reports ------------------------------------------------------------------------
+
 MONTH_NAMES = (
     'January',
     'February',
@@ -544,11 +546,241 @@ MONTH_NAMES = (
     'November',
     'December',
 )
+GROUP_LABELS = {
+    'production': "Production: the site's own code",
+    'production_build': 'Production: build tools run on the servers',
+    'development': 'Development tools only',
+    'not_deployed': 'Not deployed',
+    'unclassified': 'Not classified',
+}
+# Notes the skill writes go into a published page; they must not carry an embedded artifact.
+NOTES_LIMIT = 8_000
 
 
 def _month_name(month: str) -> str:
     year, number = month.split('-')
     return f'{MONTH_NAMES[int(number) - 1]} {year}'
+
+
+def dependency_report_title(report: dict[str, Any]) -> str:
+    return f'Dependency report: {_month_name(report["period"]["month"])}'
+
+
+def dependency_report_body(report: dict[str, Any], run: dict[str, Any], notes: str = '') -> str:
+    """The published report: a headline any reader can stop after, then the detail and data.
+
+    Every figure is from the data. `notes` is the skill's commentary on what is still open and
+    the plan for it, placed under its own heading.
+    """
+    if '<!-- automation:artifact' in notes:
+        raise ValueError('the notes must not contain an embedded artifact')
+    if len(notes) > NOTES_LIMIT:
+        raise ValueError(f'the notes are {len(notes)} characters; keep them under {NOTES_LIMIT}')
+    period, month, ytd = report['period'], report['month'], report['year_to_date']
+    policy = report['policy']['fix_within_days']
+    name = _month_name(period['month'])
+    to_date = '' if period['complete'] else f' (to {_day(period["until"])})'
+    fixed_vulns = sum(month['advisories']['fixed'].values())
+    fixed_alerts = sum(month['fixed'].values())
+    critical_fixed = month['advisories']['fixed']['critical']
+    open_vulns = sum(month['advisories']['open_at_end'].values())
+    open_alerts = sum(month['open_at_end'].values())
+    open_start = sum(month['open_at_start'].values())
+    critical_open = month['advisories']['open_at_end']['critical']
+    within = sum(month['fixed_within_target'].values())
+    headline = (
+        f'**{name}{to_date}: {_count(fixed_vulns, "vulnerability fixed", "vulnerabilities fixed")} '
+        f'({_count(fixed_alerts, "alert")})'
+        + (f', {critical_fixed} of them critical' if critical_fixed else '')
+        + f'. {critical_open} critical {"vulnerability" if critical_open == 1 else "vulnerabilities"} '
+        f'open at the end of the month, and {open_vulns} in all ({_count(open_alerts, "alert")}, '
+        f'against {open_start} at the start of the month).'
+        + _production_sentence(report['groups'], open_vulns)
+        + (f' {within} of {fixed_alerts} fixes met their target time.' if fixed_alerts else '')
+        + '**'
+    )
+    ytd_vulns = sum(ytd['advisories']['fixed'].values())
+    lines = [
+        headline,
+        '',
+        f'Year to date: {_count(ytd_vulns, "vulnerability", "vulnerabilities")} fixed '
+        f'({_count(sum(ytd["fixed"].values()), "alert")}) since {_day(ytd["since"])}.',
+        '',
+    ]
+    lines += ['## This month', '']
+    lines += _severity_table(month, policy)
+    not_fixes = []
+    if sum(month['moved'].values()):
+        not_fixes.append(
+            f'{_count(sum(month["moved"].values()), "alert")} closed on one file while still open '
+            'on another'
+        )
+    if sum(month['dismissed'].values()):
+        not_fixes.append(f'{sum(month["dismissed"].values())} dismissed')
+    if not_fixes:
+        lines += ['', f'Not counted as fixes: {"; ".join(not_fixes)}.']
+    lines += ['', '## Where they are', '']
+    lines += _group_table(report['groups'])
+    lines += [
+        '',
+        f'## Year to date, since {_day(ytd["since"])}',
+        '',
+        '| Month | Vulnerabilities fixed | Alerts fixed | Alerts open at end | Critical open at end |',
+        '|---|---:|---:|---:|---:|',
+    ]
+    for row in report['months']:
+        lines.append(
+            f'| {_month_name(row["month"])} | {row["advisories_fixed"]} | {row["fixed"]} '
+            f'| {row["open_at_end"]} | {row["critical_open_at_end"]} |'
+        )
+    lines.append(
+        f'| **Year to date** | **{sum(ytd["advisories"]["fixed"].values())}** '
+        f'| **{sum(ytd["fixed"].values())}** | | |'
+    )
+    lines += [
+        '',
+        'A vulnerability fixed in two months is counted in each month but once in the year to '
+        'date, so the months can add up to more than the total.',
+        '',
+        "## What's still open",
+        '',
+    ]
+    if notes.strip():
+        lines += [notes.strip(), '']
+    rows = report['open']
+    if rows:
+        lines += [
+            '<details>',
+            f'<summary>Open at the end of the month, by package ({_count(len(rows), "package")})</summary>',
+            '',
+            '| Package | Most severe | Vulnerabilities | Alerts | Oldest | Group | Files |',
+            '|---|---|---:|---:|---:|---|---|',
+        ]
+        lines += [
+            f'| `{r["package"]}` ({r["ecosystem"]}) | {r["severity"].capitalize()} '
+            f'| {r["advisories"]} | {r["alerts"]} | {_days(r["oldest_days"])} '
+            f'| {_cell("; ".join(GROUP_LABELS[g] for g in r["groups"]))} '
+            f'| {_cell(", ".join(f"`{m}`" for m in r["manifests"]))} |'
+            for r in rows
+        ]
+        lines += ['', '</details>']
+    else:
+        lines.append('Nothing was open at the end of the month.')
+    lines += [
+        '',
+        '<details>',
+        '<summary>How these figures are counted</summary>',
+        '',
+        "- The source is the repository's Dependabot alert history. Periods are calendar months "
+        'in UTC, by the date an alert was closed.',
+        '- A **vulnerability** is one published advisory (a GHSA id). Dependabot raises an '
+        '**alert** for each file the vulnerable package appears in, so one vulnerability can '
+        'be several alerts. Both are given.',
+        '- An alert counts as **fixed** only if Dependabot closed it as fixed and the same '
+        "vulnerability isn't still open on another file of the same project. Dismissed alerts "
+        'are never counted as fixes.',
+        '- **Where they are** comes from the file each alert is on. '
+        + (
+            'The project lists which of its files are deployed, and how.'
+            if report['groups']['source'] == 'configured'
+            else "The project hasn't listed which of its files are deployed, so Dependabot's own "
+            'runtime/development label is used, which can be wrong.'
+        ),
+        '- **Time to fix** runs from when Dependabot raised the alert to when it closed. The '
+        'targets are ' + ', '.join(f'{s} {policy[s]} days' for s in deps.SEVERITIES) + '.',
+        '- The figures are as they stood at the end of the month, whenever the report is '
+        'produced, and the data is embedded below.',
+        '',
+        '</details>',
+        '',
+        f'<sub>Reported by {_run_line(run)}.</sub>',
+        '',
+        embed(report, 'dependency-report.json'),
+        '',
+        embed({**run, 'outcome': 'report_published'}, 'run.json'),
+        '',
+    ]
+    return _within_limit('\n'.join(lines), 'report body')
+
+
+def _production_sentence(groups: dict[str, Any], open_vulns: int) -> str:
+    """How many of the open vulnerabilities are on production machines, if anything is open."""
+    if not open_vulns:
+        return ''
+    counts = groups['month']
+    code = counts['production']['advisories_open_at_end']
+    build = counts['production_build']['advisories_open_at_end']
+    if groups['source'] != 'configured':
+        return f' Dependabot marks {code} of them as in code that runs in production.'
+    return (
+        f" Of those, {code} {'is' if code == 1 else 'are'} in the site's own code and {build} in "
+        'build tools run on the production servers; the rest are in tools that are not deployed.'
+    )
+
+
+def _group_table(groups: dict[str, Any]) -> list[str]:
+    month, ytd = groups['month'], groups['year_to_date']
+    shown = [g for g in GROUP_LABELS if any(month[g].values()) or ytd[g]['fixed']]
+    if not shown:
+        return ['Nothing was fixed or open this month.']
+    lines = [
+        '| | Vulnerabilities fixed this month | Vulnerabilities open at end | Alerts open at end '
+        '| Critical alerts open | Vulnerabilities fixed this year |',
+        '|---|---:|---:|---:|---:|---:|',
+    ]
+    lines += [
+        f'| {GROUP_LABELS[g]} | {month[g]["advisories_fixed"]} '
+        f'| {month[g]["advisories_open_at_end"]} | {month[g]["open_at_end"]} '
+        f'| {month[g]["critical_open_at_end"]} | {ytd[g]["advisories_fixed"]} |'
+        for g in shown
+    ]
+    lines += [
+        '',
+        'A vulnerability found in files of two groups is counted in each.',
+    ]
+    return lines
+
+
+def _severity_table(summary: dict[str, Any], policy: dict[str, int]) -> list[str]:
+    severities = deps.SEVERITIES
+
+    def row(label: str, values: dict[str, Any], total: Any = None) -> str:
+        cells = ' | '.join(str(values[s]) for s in severities)
+        total = sum(values.values()) if total is None else total
+        return f'| {label} | {cells} | {total} |'
+
+    medians = {s: _days(summary['days_to_fix'][s]['median'], unit=False) for s in severities}
+    targets = {s: f'{policy[s]} days' for s in severities}
+    met = {
+        s: f'{summary["fixed_within_target"][s]} of {summary["fixed"][s]}'
+        if summary['fixed'][s]
+        else '–'
+        for s in severities
+    }
+    return [
+        '| | ' + ' | '.join(s.capitalize() for s in severities) + ' | Total |',
+        '|---|' + '---:|' * (len(severities) + 1),
+        row('Vulnerabilities fixed', summary['advisories']['fixed']),
+        row('Alerts fixed', summary['fixed']),
+        row('Target time to fix', targets, ''),
+        row('Median days to fix', medians, ''),
+        row(
+            'Fixes within target',
+            met,
+            f'{sum(summary["fixed_within_target"].values())} of {sum(summary["fixed"].values())}',
+        ),
+        row('Vulnerabilities open at end', summary['advisories']['open_at_end']),
+        row('Alerts open at end', summary['open_at_end']),
+        row('Alerts open at start', summary['open_at_start']),
+    ]
+
+
+def _days(value: float | None, unit: bool = True) -> str:
+    """Whole days for a reader: fractions of a day say nothing about how fast a fix came."""
+    if value is None:
+        return '–'
+    days = round(value)
+    return f'{days} {"day" if days == 1 else "days"}' if unit else str(days)
 
 
 def _day(stamp: str) -> str:

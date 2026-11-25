@@ -46,6 +46,22 @@ npm_build = 'npm run build'
 # When left out, the skill takes the test command from the project's AGENTS.md and says so.
 verify = ['make test']
 
+[dependency-report]
+# The Discussions category the monthly report is published in. Create it in the repository's
+# Discussions tab first (an announcement-type category, so only maintainers can start threads).
+# The report judges fix times against the targets in [dependency-retrospective].
+category = 'Dependency reports'
+# Where each manifest's packages end up, so the report can say how many open vulnerabilities are
+# in production. Globs, matched against Dependabot's manifest paths; the first group that matches
+# wins, and a manifest in none is "not classified". Take these from how the project is actually
+# deployed, not from file names. Leave all four out to use Dependabot's own runtime/development
+# label instead, which guesses from file names and from how each package was declared.
+production = ['requirements/base.txt', 'requirements/deploy.txt']
+# Installed and run on production machines to build what is served, but not served themselves.
+production_build = ['frontend/package.json', 'frontend/package-lock.json']
+development = ['requirements/dev.txt']
+not_deployed = ['docs/**']
+
 [dependency-retrospective]
 # How far back a retrospective looks when there is no earlier one to continue from.
 period_days = 30

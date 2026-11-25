@@ -27,7 +27,7 @@ class SchemaDocTests(unittest.TestCase):
                 with self.subTest(page=page.name, example=body[:60]):
                     artifact = json.loads(body)
                     self.assertEqual(validate(artifact), [])
-        self.assertGreaterEqual(examples, 7)
+        self.assertGreaterEqual(examples, 8)
 
     def test_every_schema_has_a_page(self) -> None:
         from artifacts import VALIDATORS
@@ -50,11 +50,11 @@ class SchemaCommandTests(unittest.TestCase):
 
     def test_lists_and_prints_pages(self) -> None:
         listed = self.run_cli().stdout.split()
-        self.assertIn('assessment', listed)
+        self.assertIn('dependency-report', listed)
         self.assertNotIn('README', listed)
-        page = self.run_cli('assessment/1')
+        page = self.run_cli('dependency-report/1')
         self.assertEqual(page.returncode, 0, page.stderr)
-        self.assertTrue(page.stdout.startswith('# `assessment/1`'))
+        self.assertTrue(page.stdout.startswith('# `dependency-report/1`'))
 
     def test_an_unknown_schema_is_refused(self) -> None:
         result = self.run_cli('nonsense')

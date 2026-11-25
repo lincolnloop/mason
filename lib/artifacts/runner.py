@@ -99,6 +99,11 @@ WORKFLOWS = {
         task='Run the dependency retrospective for this project',
         tools=MASON_CHECKS,
     ),
+    # Reads alerts and issues and posts one discussion, all through mason and gh.
+    'dependency-report': Workflow(
+        task='Run the dependency report for this project',
+        tools=(),
+    ),
 }
 
 

@@ -19,6 +19,7 @@ from . import (
     collect,
     deps,
     detect,
+    discussions,
     doctor,
     embed,
     lock,
@@ -26,6 +27,7 @@ from . import (
     paths,
     project,
     render,
+    report,
     run,
     runner,
     validate,
@@ -100,7 +102,36 @@ def main(argv: list[str] | None = None) -> int:
     cmd = commands.add_parser(
         'schema', help="print a schema's page: what each field of an artifact means"
     )
-    cmd.add_argument('name', nargs='?', help='e.g. assessment or finding; omit to list them')
+    cmd.add_argument('name', nargs='?', help='e.g. dependency-report or finding; omit to list them')
+
+    cmd = commands.add_parser(
+        'collect-report', help="a month's vulnerability figures, as dependency-report/1"
+    )
+    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('--run', type=Path, required=True, help="the reporting run's run.json")
+    cmd.add_argument(
+        '--month', help='YYYY-MM; default the last complete month. The current month runs to now'
+    )
+    cmd.add_argument(
+        '--alerts', type=Path, help='saved alerts (gh api …/dependabot/alerts); default fetched'
+    )
+    cmd.add_argument('-o', '--output', type=Path)
+
+    cmd = commands.add_parser('render-report', help='render a dependency report as markdown')
+    cmd.add_argument('report', type=Path, help='collect-report output')
+    cmd.add_argument('--run', type=Path, required=True, help="the run's run.json")
+    cmd.add_argument('--notes', type=Path, help="markdown on what's still open and the plan")
+    cmd.add_argument('--title', action='store_true', help='print only the title')
+    cmd.add_argument('-o', '--output', type=Path)
+
+    cmd = commands.add_parser(
+        'post-discussion',
+        help='publish markdown as a new discussion; refuses a title the category already has',
+    )
+    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('--category', required=True, help='the Discussions category, by name')
+    cmd.add_argument('--title', required=True)
+    cmd.add_argument('--body-file', type=Path, required=True)
 
     cmd = commands.add_parser(
         'run-start', help="create a run's directory and record; prints dir, id and branch"
@@ -427,6 +458,76 @@ def _schema(args: argparse.Namespace) -> str:
     return (SCHEMA_PAGES / f'{name}.md').read_text(encoding='utf-8')
 
 
+def _collect_report(args: argparse.Namespace) -> str:
+    (record,) = _load(args.run, schema='run/1')
+    try:
+        config = project.load(args.project, 'dependency-report')
+    except project.ConfigError as exc:
+        raise Refused(str(exc)) from exc
+    targets = config['dependency-retrospective']
+    now = datetime.now(UTC)
+    try:
+        year, month = report.parse_month(args.month) if args.month else report.previous_month(now)
+        report.month_bounds(year, month, now)
+    except ValueError as exc:
+        raise Refused(f'--month: {exc}') from exc
+    repo = config['repo']['name']
+    if args.alerts:
+        alerts: list[dict[str, Any]] = []
+        for page in deps.json_stream(_read(args.alerts)):
+            alerts.extend(page if isinstance(page, list) else [page])
+    else:
+        try:
+            alerts = collect.all_alerts(repo)
+        except collect.CollectError as exc:
+            raise Refused(str(exc)) from exc
+    try:
+        result = report.build(
+            repo=repo,
+            run=record,
+            year=year,
+            month=month,
+            now=now,
+            fix_within_days={s: targets[f'fix_within_days_{s}'] for s in deps.SEVERITIES},
+            alerts=alerts,
+            manifests={g: config['dependency-report'][g] for g in report.CONFIGURED_GROUPS},
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise Refused(f'the alerts are not in the shape Dependabot returns: {exc!r}') from exc
+    errors = validate(result)
+    if errors:  # a bug here, not bad input: say so rather than write a broken artifact
+        raise Refused('\n'.join(['the report data is invalid:', *errors]))
+    return json.dumps(result, indent=2, ensure_ascii=False) + '\n'
+
+
+def _render_report(args: argparse.Namespace) -> str:
+    (data,) = _load(args.report, schema=report.SCHEMA)
+    if args.title:
+        return render.dependency_report_title(data) + '\n'
+    (record,) = _load(args.run, schema='run/1')
+    if data['run'] != record['id']:
+        raise Refused(f'the report is from run {data["run"]!r}, not {record["id"]!r}')
+    notes = _read(args.notes) if args.notes else ''
+    try:
+        return render.dependency_report_body(data, record, notes)
+    except ValueError as exc:
+        raise Refused(str(exc)) from exc
+
+
+def _post_discussion(args: argparse.Namespace) -> str:
+    try:
+        repo = project.load(args.project)['repo']['name']
+    except project.ConfigError as exc:
+        raise Refused(str(exc)) from exc
+    body = _read(args.body_file)
+    if not body.strip():
+        raise Refused(f'{args.body_file}: is empty')
+    try:
+        return discussions.post(collect.gh, repo, args.category, args.title, body) + '\n'
+    except (discussions.DiscussionError, collect.CollectError) as exc:
+        raise Refused(str(exc)) from exc
+
+
 def _run_start(args: argparse.Namespace) -> str:
     try:
         repo = project.load(args.project)['repo']['name']
@@ -717,6 +818,9 @@ COMMANDS = {
     'render-retrospective': _render_retrospective,
     'schema': _schema,
     'source': _source,
+    'collect-report': _collect_report,
+    'render-report': _render_report,
+    'post-discussion': _post_discussion,
     'extract': _extract,
     'build-assessment': _build_assessment,
     'render-assessment': _render_assessment,

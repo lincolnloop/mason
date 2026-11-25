@@ -17,7 +17,8 @@ YYYY>`). Each run replaces the issue's body with the current assessment and adds
 what changed since the last one, so the body is always the state of things and the comments are
 the month's history. The first run in a month opens the month's issue and closes the previous one.
 
-This skill changes no code. `dependency-upgrades` reads the issue and applies the easy findings.
+This skill changes no code. `dependency-upgrades` reads the issue and applies the easy findings;
+`dependency-report` reads it for what is still open and why.
 
 **Paths.** `mason` is mason's command line, on the PATH (`mason doctor` checks it), and
 `mason schema <name>` prints what each field of a schema means. Other skills named here are

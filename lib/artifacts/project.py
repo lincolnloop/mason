@@ -57,6 +57,15 @@ SECTIONS: dict[str, dict[str, tuple[str, bool]]] = {
         'npm_build': ('str', False),
         'verify': ('list', False),
     },
+    'dependency-report': {
+        # The Discussions category the monthly report is published in.
+        'category': ('str', True),
+        # Manifest globs for where each vulnerable package is. None set: Dependabot's guess.
+        'production': ('list', True),
+        'production_build': ('list', True),
+        'development': ('list', True),
+        'not_deployed': ('list', True),
+    },
     'dependency-retrospective': {
         'period_days': ('int', True),
         'fix_within_days_critical': ('int', True),
@@ -81,6 +90,13 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         'ci': False,
     },
     'dependency-upgrades': {'pip_requirements': [], 'pip_sources': [], 'npm_projects': []},
+    'dependency-report': {
+        'category': 'Dependency reports',
+        'production': [],
+        'production_build': [],
+        'development': [],
+        'not_deployed': [],
+    },
     # Starting points, to tune per project: how far back a retrospective looks by default, how
     # fast each severity should be fixed, and how long without a release makes a package stale.
     'dependency-retrospective': {

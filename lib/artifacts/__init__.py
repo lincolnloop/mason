@@ -5,6 +5,7 @@
 - `run`: who started a run, where, and how it ended.
 - `outcomes`: what happened afterwards, for a retrospective.
 - `assessment`: every open alert, and what was decided about it.
+- `dependency-report`: a month's vulnerability figures, for the people the project answers to.
 
 Each module has `SCHEMA` (the value of the artifact's `schema` field) and `validate(artifact)`,
 which returns a list of errors, empty when the artifact is valid.
@@ -17,6 +18,7 @@ from . import (
     change,
     finding,
     outcomes,
+    report,
     run,
 )
 
@@ -25,6 +27,7 @@ VALIDATORS = {
     change.SCHEMA: change.validate,
     run.SCHEMA: run.validate,
     outcomes.SCHEMA: outcomes.validate,
+    report.SCHEMA: report.validate,
     assessment.SCHEMA: assessment.validate,
 }
 

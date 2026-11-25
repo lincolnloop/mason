@@ -30,12 +30,11 @@ def mason(*args: str, cwd: Path | None = None, env: dict | None = None):
 class PromptTests(unittest.TestCase):
     def test_the_request_and_the_mode(self) -> None:
         self.assertEqual(
-            runner.prompt('dependency-assessment'),
-            'Run the dependency assessment for this project.',
+            runner.prompt('dependency-report'), 'Run the dependency report for this project.'
         )
         self.assertEqual(
-            runner.prompt('dependency-assessment', request='for October 2026', unattended=True),
-            'Run the dependency assessment for this project (for October 2026), unattended.',
+            runner.prompt('dependency-report', request='for October 2026', unattended=True),
+            'Run the dependency report for this project (for October 2026), unattended.',
         )
 
 
@@ -58,7 +57,7 @@ class HeadlessCommandTests(unittest.TestCase):
         self.assertIn('Bash(gh pr merge *)', denied)
 
     def test_skills_kept_for_mason_are_added(self) -> None:
-        command = runner.command(Path('/work/app'), STATE, 'dependency-assessment', skills=SKILLS)
+        command = runner.command(Path('/work/app'), STATE, 'dependency-report', skills=SKILLS)
         added = [command[i + 1] for i, arg in enumerate(command) if arg == '--add-dir']
         self.assertEqual(added, ['/state/o/app', '/data/mason'])
 
@@ -82,10 +81,10 @@ class HeadlessCommandTests(unittest.TestCase):
 class InteractiveCommandTests(unittest.TestCase):
     def test_starts_the_agent_with_the_request_typed_in(self) -> None:
         command = runner.interactive_command(
-            Path('/work/app'), STATE, 'dependency-assessment', SKILLS, request='for October 2026'
+            Path('/work/app'), STATE, 'dependency-report', SKILLS, request='for October 2026'
         )
         self.assertEqual(command[0], 'claude')
-        self.assertTrue(command[1].startswith('Run the dependency assessment for this project'))
+        self.assertTrue(command[1].startswith('Run the dependency report for this project'))
         self.assertIn('(for October 2026)', command[1])
         self.assertNotIn('unattended', command[1])
         self.assertNotIn('-p', command)
@@ -93,7 +92,7 @@ class InteractiveCommandTests(unittest.TestCase):
         self.assertEqual(command[2:], ['--add-dir', '/state/o/app', '--add-dir', '/data/mason'])
 
     def test_without_skills_kept_for_mason(self) -> None:
-        command = runner.interactive_command(Path('/work/app'), STATE, 'dependency-assessment')
+        command = runner.interactive_command(Path('/work/app'), STATE, 'dependency-report')
         self.assertEqual(command[2:], ['--add-dir', '/state/o/app'])
 
 
@@ -202,39 +201,34 @@ class RunCommandTests(unittest.TestCase):
 
     def test_interactive_dry_run_in_the_current_directory(self) -> None:
         result = mason(
-            'run',
-            'dependency-assessment',
-            '--request',
-            'for 2026-10',
-            '--dry-run',
-            cwd=self.project,
+            'run', 'dependency-report', '--request', 'for 2026-10', '--dry-run', cwd=self.project
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(
-            "claude 'Run the dependency assessment for this project (for 2026-10).", result.stdout
+            "claude 'Run the dependency report for this project (for 2026-10).", result.stdout
         )
         self.assertNotIn(str(paths.data_home()), result.stdout)
 
     def test_skills_kept_for_mason_are_added_when_present(self) -> None:
         (paths.data_home() / '.claude' / 'skills').mkdir(parents=True)
-        result = mason('run', 'dependency-assessment', '--project', str(self.project), '--dry-run')
+        result = mason('run', 'dependency-report', '--project', str(self.project), '--dry-run')
         self.assertIn(f'--add-dir {paths.data_home()}', result.stdout)
 
     def test_by_repository_uses_masons_own_clone(self) -> None:
-        result = mason('run', 'dependency-assessment', '--repo', 'o/app', '--dry-run')
+        result = mason('run', 'dependency-report', '--repo', 'o/app', '--dry-run')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f'cd {paths.clone("o/app")}', result.stdout)
         self.assertFalse(paths.clone('o/app').exists())  # a dry run clones nothing
 
     def test_refusals(self) -> None:
         with tempfile.TemporaryDirectory() as empty:
-            result = mason('run', 'dependency-assessment', '--project', empty, '--dry-run')
+            result = mason('run', 'dependency-report', '--project', empty, '--dry-run')
             self.assertEqual(result.returncode, 1)
             self.assertIn('is not the root of a git repository', result.stderr)
-        result = mason('run', 'dependency-assessment', '--repo', 'not-a-repo', '--dry-run')
+        result = mason('run', 'dependency-report', '--repo', 'not-a-repo', '--dry-run')
         self.assertIn('owner/name', result.stderr)
         subprocess.run(['git', '-C', str(self.project), 'remote', 'remove', 'origin'], check=True)
-        result = mason('run', 'dependency-assessment', '--project', str(self.project), '--dry-run')
+        result = mason('run', 'dependency-report', '--project', str(self.project), '--dry-run')
         self.assertIn('no GitHub origin remote', result.stderr)
 
 
