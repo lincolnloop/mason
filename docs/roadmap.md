@@ -37,7 +37,7 @@ workflows, and see in one place what needs them.
 `mason project` manages the projects a developer looks after, which today is a set of manual
 README steps.
 
-- `mason project add acme/app`: clone, detect the configuration (`mason config`), choose the
+- `mason project add acme/app` (built): clone, detect the configuration (`mason config`), choose the
   workflows to enable, check the GitHub token can do what they need (read alerts, push, open PRs,
   post discussions), create the `automation` label, and write the settings file
   (`~/.config/mason/projects/acme/app.toml`). Interactive by default; `--workflows` and `--yes`
@@ -46,7 +46,7 @@ README steps.
 - `mason project archive acme/app`: stop its runs and keep its results and records, read-only.
   `mason project remove` deletes its settings, clone and state; it asks first, and lists what is
   published that it leaves in place.
-- `[workflows] enabled` in a project's settings (`workflows.md` §4), so a project runs only the
+- `[workflows] enabled` in a project's settings (`workflows.md` §4; built), so a project runs only the
   workflows chosen for it. Only the list is in 0.1; mapping a workflow to another skill comes in
   0.2.
 

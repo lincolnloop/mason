@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import detect, paths
+from . import detect, paths, runner
 from ._check import REPO_PATTERN, Checker
 
 # Where the file used to be kept: in the project. A `mason.toml` at a project's root is still
@@ -41,6 +41,8 @@ EXAMPLE = 'mason.toml.example in the mason repository'
 # section -> {key: (kind, required)}; kind is 'str', 'bool', 'int', or 'list' (of strings).
 # `required` applies to the resolved value, never to the file.
 SECTIONS: dict[str, dict[str, tuple[str, bool]]] = {
+    # The workflows the developer runs on this project. Unset: every workflow.
+    'workflows': {'enabled': ('list', False)},
     'repo': {'name': ('str', True), 'main_branch': ('str', True)},
     'limits': {'open_agent_prs': ('int', True), 'stale_after_days': ('int', True)},
     'verify': {
@@ -350,6 +352,14 @@ def check(config: dict[str, Any], required_sections: tuple[str, ...] = ()) -> li
         'all',
     ):
         checker.error('$.code-review.inline', 'must be none, suggestions or all')
+    workflows = config.get('workflows')
+    if isinstance(workflows, dict) and isinstance(workflows.get('enabled'), list):
+        for index, name in enumerate(workflows['enabled']):
+            if isinstance(name, str) and name not in runner.WORKFLOWS:
+                checker.error(
+                    f'$.workflows.enabled[{index}]',
+                    f'is not a workflow: {name!r} (known: {", ".join(sorted(runner.WORKFLOWS))})',
+                )
     upgrades = config.get('dependency-upgrades')
     if 'dependency-upgrades' in required_sections and isinstance(upgrades, dict):
         if not upgrades.get('pip_requirements') and not upgrades.get('npm_projects'):
@@ -394,3 +404,13 @@ def _toml_value(value: Any) -> str:
     if isinstance(value, list):
         return '[' + ', '.join(json.dumps(item) for item in value) + ']'
     return json.dumps(value)
+
+
+def enabled_workflows(repo: str, env: Mapping[str, str] | None = None) -> list[str]:
+    """The workflows enabled for a project in the developer's settings: every workflow when the
+    file doesn't exist or doesn't say."""
+    path = paths.settings(repo, env)
+    if not path.exists():
+        return sorted(runner.WORKFLOWS)
+    enabled = _read(path).get('workflows', {}).get('enabled')
+    return sorted(runner.WORKFLOWS) if enabled is None else list(enabled)

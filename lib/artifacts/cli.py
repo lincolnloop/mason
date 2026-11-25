@@ -27,6 +27,7 @@ from . import (
     outcomes,
     paths,
     project,
+    projects,
     render,
     report,
     review_context,
@@ -375,6 +376,24 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_argument('--skill', action='append', default=[], help='only this skill; repeatable')
     sub = action.add_parser('list', help='list the installed skills')
     sub.add_argument('--global', dest='everywhere', action='store_true')
+
+    cmd = commands.add_parser('project', help='add a project you look after with mason')
+    action = cmd.add_subparsers(dest='action', required=True)
+    sub = action.add_parser(
+        'add',
+        help='clone it, choose its workflows, check GitHub access, create the label, and write '
+        'your settings for it',
+    )
+    sub.add_argument('repo', help='owner/name of its GitHub repository')
+    sub.add_argument(
+        '--workflow',
+        action='append',
+        default=[],
+        choices=sorted(runner.WORKFLOWS),
+        help='a workflow to enable; repeatable (default: ask, or every workflow with --yes)',
+    )
+    sub.add_argument('--yes', action='store_true', help='ask nothing')
+    sub.add_argument('--dry-run', action='store_true', help='say what it would do; write nothing')
 
     cmd = commands.add_parser('lock', help='take or release the one-run-at-a-time lock')
     cmd.add_argument('action', choices=('acquire', 'release'))
@@ -992,6 +1011,15 @@ def _run(args: argparse.Namespace) -> str:
                 f'{directory} has no GitHub origin remote, so its runs have nowhere to go'
             )
         repo = found
+    try:
+        enabled = project.enabled_workflows(repo)
+    except project.ConfigError as exc:
+        raise Refused(str(exc)) from exc
+    if args.workflow not in enabled:
+        raise Refused(
+            f'{args.workflow} is not enabled for {repo}: add it to `enabled` under [workflows] '
+            f'in {paths.settings(repo)}'
+        )
     state, skills = paths.project_state(repo), paths.skills_home()
     if args.unattended:
         command = runner.command(
@@ -1060,6 +1088,33 @@ def _skills(args: argparse.Namespace) -> str:
     return ''
 
 
+def _project(args: argparse.Namespace) -> str:
+    workflows = list(dict.fromkeys(args.workflow))
+    try:
+        if not workflows and not args.yes:
+            print(f'Workflows for {args.repo}:\n{projects.menu()}', file=sys.stderr)
+            workflows = projects.choose(_ask('Enable which (numbers or names; Enter for all)? '))
+        plan = projects.plan(args.repo, workflows or sorted(runner.WORKFLOWS))
+        print(plan.describe(), file=sys.stderr)
+        if args.dry_run:
+            return 'Dry run: nothing written.\n'
+        if not args.yes and _ask('Go ahead? [y/N] ').strip().lower() not in ('y', 'yes'):
+            return 'Nothing written.\n'
+        return projects.apply(plan)
+    except projects.ProjectError as exc:
+        raise Refused(str(exc)) from exc
+
+
+def _ask(question: str) -> str:
+    print(question, end='', file=sys.stderr, flush=True)
+    try:
+        return input()
+    except EOFError as exc:
+        raise Refused(
+            '\nno answer: give --workflow and --yes to add a project without asking'
+        ) from exc
+
+
 def _lock(args: argparse.Namespace) -> str:
     try:
         repo = project.load(args.project)['repo']['name']
@@ -1080,6 +1135,7 @@ COMMANDS = {
     'version': _version,
     'doctor': _doctor,
     'lock': _lock,
+    'project': _project,
     'run': _run,
     'skills': _skills,
     'validate': _validate,

@@ -34,6 +34,8 @@ Style: single quotes, 100-character lines, explicit type hints, ruff for lint an
 - Lint and format: `ruff check . && ruff format --check .`
 - Validate an artifact: `uv run mason validate <file.json>` (a review also takes
   `--diff <pr.diff>`)
+- Add a project (clone, workflows, GitHub access, label, settings):
+  `uv run mason project add <owner>/<repo> [--workflow <name>] [--yes] [--dry-run]`
 - A project's resolved configuration:
   `uv run mason config <project> [--toml]`
 - Check the prerequisites (tools, `gh` login, a workflow's tokens):

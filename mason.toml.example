@@ -15,6 +15,11 @@
 # older file and says how to update it, rather than misreading it.
 version = 1
 
+[workflows]
+# The workflows you run on this project; `mason run` refuses any other. Leave it out to allow
+# every workflow. `mason project add` writes it.
+enabled = ['dependency-assessment', 'dependency-upgrades', 'code-review']
+
 [repo]
 name = 'example-org/example-app'
 main_branch = 'main'

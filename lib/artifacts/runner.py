@@ -77,6 +77,9 @@ class Workflow:
     # Environment variables the workflow can't run without. `artifact doctor` checks they are
     # set, never what they hold.
     env: tuple[str, ...] = ()
+    # What the GitHub login must reach besides pushing branches and opening issues and PRs, which
+    # every workflow does: 'alerts' (Dependabot alerts), 'discussions' (posting in Discussions).
+    github: tuple[str, ...] = ()
 
 
 # mason's own checks, run in a clone of it (`mason source`) before a retrospective proposes a
@@ -89,20 +92,24 @@ WORKFLOWS = {
     'dependency-assessment': Workflow(
         task='Run the dependency assessment for this project',
         tools=(),
+        github=('alerts',),
     ),
     'dependency-upgrades': Workflow(
         task='Run the dependency upgrades for this project',
         # pip_compile and the build commands, as the project configures them.
         tools=('Bash(make *)', 'Bash(npm *)', 'Bash(pip-compile *)'),
+        github=('alerts',),
     ),
     'dependency-retrospective': Workflow(
         task='Run the dependency retrospective for this project',
         tools=MASON_CHECKS,
+        github=('alerts',),
     ),
     # Reads alerts and issues and posts one discussion, all through mason and gh.
     'dependency-report': Workflow(
         task='Run the dependency report for this project',
         tools=(),
+        github=('alerts', 'discussions'),
     ),
     # A review reads someone else's code and never runs it: no build, test or package tools.
     'code-review': Workflow(

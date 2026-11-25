@@ -61,22 +61,23 @@ Then:
    ```sh
    mason doctor
    ```
-3. **Check what it detects in the project.** No settings file is needed. This prints what
-   was found (the GitHub repo, main branch, requirements files, npm lockfiles, CI) and where
-   each value came from:
+3. **Add each project you look after.** mason clones it into its own cache, asks which
+   workflows you run on it, checks that your `gh` login reaches what they need (pushing
+   branches, Dependabot alerts, Discussions), creates the `automation` label its PRs and issues
+   carry, and writes your settings for it:
    ```sh
-   mason config path/to/<project> --section dependency-upgrades
+   mason project add <owner>/<repo>
+   mason project add <owner>/<repo> --workflow code-review --workflow dependency-upgrades --yes
    ```
-   To change a value, add a settings file for the project. It is yours, not the project's, so it
-   lives in your home directory, named after the project's GitHub repository:
-   `~/.config/mason/projects/<owner>/<repo>.toml` (`config` prints the path as `settings.path`).
-   Either copy `mason.toml.example` (every key, for an example project) and keep only what
-   differs, or start from `--toml`, which prints this project's detected values commented out,
-   ready to uncomment.
-4. **Create the label** the workflow's PRs carry. It is how open agent PRs are counted:
-   ```sh
-   gh label create automation --repo <owner>/<repo> --description 'Opened by an agent workflow'
-   ```
+   It says what it will do before doing it (`--dry-run` stops there), and lists anything still
+   missing: settings that can't be detected, such as the Sentry organisation, and tokens.
+
+   The settings are yours, not the project's, so they live in your home directory, named after
+   the project's GitHub repository: `~/.config/mason/projects/<owner>/<repo>.toml`. The file
+   starts with the workflows you chose (`[workflows] enabled`; `mason run` refuses any other),
+   then what was detected, commented out, ready to uncomment and change.
+   `mason config path/to/<project>` shows every resolved value and where it came from, and
+   `mason.toml.example` has every key.
 
 ## Run it
 
