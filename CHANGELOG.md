@@ -3,7 +3,7 @@
 What changed in each release of mason, for the developers who install it. Install the engine and
 its skills from the same tag: each skill states the mason versions it works with.
 
-## Unreleased (0.5)
+## 0.5.0
 
 - `mason approve <id>` and `mason dismiss <id> --reason` decide an action a run left for you;
   either clears it from the inbox. Approving runs the recorded command only if it is a `gh` or

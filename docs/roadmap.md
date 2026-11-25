@@ -128,7 +128,7 @@ mason owns the schedule, and says what was done, what is due and what was missed
 - Consolidation inputs, for reports built from other reports (built).
 - The inbox gains overdue workflows and blocked consolidations (built).
 
-## 0.5: following work through
+## 0.5: following work through (released 0.5.0)
 
 PRs that are opened don't sit unnoticed, and what a run left for a person can be decided in one
 place.
