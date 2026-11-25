@@ -3,7 +3,7 @@
 What changed in each release of mason, for the developers who install it. Install the engine and
 its skills from the same tag: each skill states the mason versions it works with.
 
-## Unreleased
+## 0.4.1
 
 - The retrospectives cover the calendar period their run is for (`mason run` and `run-due` set
   it), so October's covers exactly October, and their results are keyed by it. `--period` on the
