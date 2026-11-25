@@ -198,6 +198,29 @@ set up the same way, run less often (`OnCalendar=weekly` or `monthly`), with
 `journalctl --user -u dependency-upgrades`, plus the session log under `~/.local/state/mason/`. Everything a
 reviewer needs is on GitHub.
 
+## What needs you
+
+`mason inbox` lists, across every active project, what is waiting on you, most urgent first:
+
+- **broken:** a failed unattended run (with its log), a token a workflow needs that isn't set,
+  an installed skill that doesn't match this mason;
+- **blocked:** a PR mason opened whose CI is failing, or that conflicts with its base;
+- **decide:** an action an unattended run left for a person instead of taking it (opening an
+  issue, archiving Sentry noise), with the command that would do it;
+- **review:** a PR mason opened that is waiting for review, has changes requested, or is a draft;
+- **respond:** an issue mason opened that nobody has answered.
+
+```sh
+mason inbox                      # everything
+mason inbox --repo <owner>/<repo>
+mason inbox --count              # prints how many; exits 1 if any, for a status bar or cron mail
+mason inbox --json
+```
+
+Nothing in it is kept by hand: each item comes from GitHub (open PRs and issues with the
+`automation` label) and this machine's run records, every time. Merging the PR, answering the
+issue, or a later run of the same workflow clears it.
+
 ## Layout
 
 ```

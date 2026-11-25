@@ -25,7 +25,7 @@ Built:
   install`; settings and state in the developer's home directory; `mason run`, interactive or
   unattended, in mason's own clone of a project.
 
-Not built: everything below.
+Not built: everything below that is not marked (built).
 
 ## 0.1: one developer, several projects
 
@@ -52,8 +52,8 @@ README steps.
 
 ### The inbox
 
-`mason inbox [--repo acme/app]` lists what needs the developer, across every project, most
-urgent first:
+`mason inbox [--repo acme/app]` (built) lists what needs the developer, across every project,
+most urgent first:
 
 | Item | Source |
 |---|---|
@@ -71,7 +71,8 @@ urgent first:
 - Confirm-first actions are listed, not taken. Approving one from the inbox is in 0.5.
 
 To list confirm-first actions, unattended runs record them in a structured form in the run's
-directory (`deferred.json`), rather than only in the report's prose.
+directory (`deferred.json`, written by `mason defer`; built), rather than only in the report's
+prose. Unattended runs also record how they ended beside their log, so failures can be listed.
 
 ### Finishing the packaging
 

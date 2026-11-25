@@ -33,6 +33,11 @@ is refused; every command here that saves a file does it with its own option.
 request says so or `MASON_UNATTENDED=1` is set; Sentry is read only through `mason`;
 no personal data goes into GitHub.
 
+**Deferred actions.** Unattended, every *confirm first* action this skill doesn't take is also
+recorded for the developer's inbox (`mason inbox`), one command each, as well as listed in the
+report: `mason defer <RUN> --action '<what to do>' --reason '<why it needs a person>'`, adding
+`--command '<the command that would do it>'` when there is one. `RUN` is the run directory.
+
 ## Autonomy
 
 | Action | Level |

@@ -24,6 +24,7 @@ from . import (
     discussions,
     doctor,
     embed,
+    inbox,
     lock,
     outcomes,
     paths,
@@ -66,6 +67,10 @@ def project_dir(value: str) -> Path:
 
 class Refused(Exception):
     """An input problem to report on stderr, exit status 1."""
+
+
+class Answer(Refused):
+    """An answer on stdout with exit status 1, for a script to act on: `inbox --count`."""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -430,6 +435,23 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_argument('repo', help='owner/name')
     sub.add_argument('--yes', action='store_true', help='ask nothing')
 
+    cmd = commands.add_parser(
+        'inbox', help='what needs you, across your projects; exit 1 with --count if anything does'
+    )
+    cmd.add_argument('--repo', action='append', default=[], help='only this project; repeatable')
+    cmd.add_argument('--json', action='store_true', help='the items as JSON')
+    cmd.add_argument('--count', action='store_true', help='print how many; exit 1 if any')
+
+    cmd = commands.add_parser(
+        'defer', help='record an action an unattended run left for a person, for `mason inbox`'
+    )
+    cmd.add_argument('run', type=Path, help="the run's directory (run-start's `dir`)")
+    cmd.add_argument('--action', required=True, help='what to do')
+    cmd.add_argument('--reason', required=True, help='why it needs a person')
+    cmd.add_argument(
+        '--command', dest='suggested', help='the command that would do it, if there is one'
+    )
+
     cmd = commands.add_parser('lock', help='take or release the one-run-at-a-time lock')
     cmd.add_argument('action', choices=('acquire', 'release'))
     cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
@@ -439,7 +461,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         output = COMMANDS[args.command](args)
     except Refused as exc:
-        print(exc, file=sys.stderr)
+        print(exc, file=sys.stdout if isinstance(exc, Answer) else sys.stderr)
         return 1
     if output is not None:
         if getattr(args, 'output', None):
@@ -1193,6 +1215,29 @@ def _ask(question: str) -> str:
         ) from exc
 
 
+def _inbox(args: argparse.Namespace) -> str:
+    added = projects.added()
+    for repo in args.repo:
+        if repo not in added:
+            raise Refused(f'--repo: {repo} is not added: `mason project add {repo}`')
+    try:
+        items = inbox.collect(args.repo or None)
+    except (inbox.InboxError, projects.ProjectError) as exc:
+        raise Refused(str(exc)) from exc
+    if args.count:
+        if items:
+            raise Answer(f'{len(items)}')
+        return '0\n'
+    return inbox.to_json(items) if args.json else inbox.render(items)
+
+
+def _defer(args: argparse.Namespace) -> str:
+    try:
+        return inbox.defer(args.run, args.action, args.reason, args.suggested)
+    except inbox.InboxError as exc:
+        raise Refused(str(exc)) from exc
+
+
 def _lock(args: argparse.Namespace) -> str:
     try:
         repo = project.load(args.project)['repo']['name']
@@ -1214,6 +1259,8 @@ COMMANDS = {
     'doctor': _doctor,
     'lock': _lock,
     'project': _project,
+    'inbox': _inbox,
+    'defer': _defer,
     'run': _run,
     'skills': _skills,
     'validate': _validate,

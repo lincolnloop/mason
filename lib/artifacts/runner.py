@@ -16,6 +16,7 @@ The tool lists are defence in depth. The real limit is the GitHub token the sess
 give it no more than reading alerts, pushing branches and opening pull requests.
 """
 
+import json
 import os
 import subprocess
 from dataclasses import dataclass
@@ -247,4 +248,14 @@ def run(
         result = subprocess.run(
             args, cwd=project, env=env, stdout=handle, stderr=subprocess.STDOUT, check=False
         )
+    write_status(log, result.returncode)
     return result.returncode, log
+
+
+def write_status(log: Path, status: int, now: datetime | None = None) -> Path:
+    """Record how an unattended run ended, beside its log, so `mason inbox` can find failures."""
+    path = log.with_name(log.name.removesuffix('.log') + '.status.json')
+    finished = (now or datetime.now(UTC)).strftime('%Y-%m-%d %H:%M UTC')
+    record = {'status': status, 'log': str(log), 'finished_at': finished}
+    path.write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
+    return path
