@@ -26,7 +26,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from . import detect, paths, schedules, skills
+from . import credentials, detect, paths, schedules, skills
 from ._check import REPO_PATTERN, Checker
 
 # Where the file used to be kept: in the project. A `mason.toml` at a project's root is still
@@ -247,7 +247,8 @@ def resolve(project: Path, env: Mapping[str, str] | None = None) -> Resolved:
                 resolved.sources[(section, key)] = 'default'
         if values or section in file_config:
             resolved.config[section] = values
-    for section in sorted(set(file_config) - set(sections) - {'skills', 'grants', 'schedule'}):
+    known = {'skills', 'grants', 'schedule', 'credentials'}
+    for section in sorted(set(file_config) - set(sections) - known):
         resolved.notes.append(f'[{section}] is for no installed workflow, so it is not read')
     for path in detect.unsupported_lockfiles(detect.tracked_files(project)):
         resolved.notes.append(f'{path}: not read; dependency-upgrades supports pip-compile and npm')
@@ -311,6 +312,10 @@ def check(
                         checker.error(f'{where}.since', 'must be a date, e.g. 2026-11-25')
             else:
                 _check_schedule(checker, value, where)
+    # Where the project's credentials come from (credentials.py).
+    if 'credentials' in config:
+        for problem in credentials.check(config['credentials']):
+            checker.error('$.credentials', problem)
     # workflow name -> the tools its mapped skill may use unattended.
     granted = config.get('grants')
     if 'grants' in config and checker.object(granted, '$.grants', (), tuple(granted or ())):

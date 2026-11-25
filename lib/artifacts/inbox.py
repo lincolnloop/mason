@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import paths, project, projects, runner, skills
+from . import credentials, paths, project, projects, runner, skills
 
 # Most urgent first: something is broken, a PR can't merge, a person's decision is waiting, a
 # PR is waiting for review, an issue has had no response.
@@ -410,7 +410,19 @@ def collect(
             continue
         found += local_items(repo, workflows, env)
         found += schedule_items(repo, env)
-        found += github_items(repo, run_gh, now)
+        if run_gh is projects.gh:
+            try:
+                as_project = credentials.environment(repo, base=env, env=env)
+            except credentials.CredentialError as exc:
+                found.append(Item(repo, BROKEN, "can't use its credentials", str(exc)))
+                continue
+
+            def project_gh(args, as_project=as_project):
+                return projects.gh(args, env=as_project)
+
+            found += github_items(repo, project_gh, now)
+        else:
+            found += github_items(repo, run_gh, now)
     return sorted(found, key=lambda i: (ORDER.index(i.kind), i.project))
 
 

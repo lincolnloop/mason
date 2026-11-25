@@ -31,6 +31,14 @@ code-review = '~/Work/example-org-skills/code-review'
 # runs are refused until every tool it asks for is. Merging and force-pushing are never allowed.
 code-review = ['Bash(make *)']
 
+[credentials]
+# Who this project's work runs as (or set it for every project of the owner, in
+# ~/.config/mason/owners/<owner>.toml). The settings name where a secret is, never the secret.
+env_file = '~/.config/mason/env.example-org'
+github = 'gh:example-org-bot'
+git_name = 'mason (example-org)'
+git_email = 'mason@example-org.example'
+
 [project]
 # Written by `mason project archive`, and removed by `--undo`: an archived project runs nothing.
 archived = '2026-11-25'

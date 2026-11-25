@@ -168,6 +168,28 @@ Never put a token in a settings file or in the project's `.env`
 (it is copied into every run's worktree). Anything in the session's environment can be read by
 the session, so give each token only the scopes the workflows use.
 
+**Credentials per project.** Working for several organisations, give each its own tokens and
+identity rather than one token that reaches them all. In a project's settings, or in
+`~/.config/mason/owners/<owner>.toml` for every project of that owner:
+
+```toml
+[credentials]
+env_file = '~/.config/mason/env.acme'   # this owner's tokens, as KEY=value lines (chmod 600)
+github = 'gh:acme-bot'                  # GH_TOKEN from a gh login (`gh auth login` as acme-bot),
+                                        # or 'env:ACME_GH_TOKEN' from the env file
+git_name = 'mason (acme)'               # who mason's commits are from
+git_email = 'mason@acme.example'
+host = 'github.acme.example'            # for GitHub Enterprise
+```
+
+A run on that project, and mason's own GitHub calls for it (the inbox, publishing, approving,
+`project add`), get those tokens and that identity, and none of the other projects': every
+variable another project's or owner's env file sets, or the shared `~/.config/mason/env`, is
+removed unless this project sets it too. PRs show as whoever owns the GitHub token, so a bot
+account's token makes them the bot's. `mason doctor --repo <owner>/<repo>` shows which
+credentials a project resolves to, whose token it is, a classic token's scopes, and when it
+expires. The settings name where a secret is; they never hold one.
+
 An interactive Claude Code sign-in expires, so a scheduled job needs a long-lived token: run
 `claude setup-token` and give the job the token it prints, as `CLAUDE_CODE_OAUTH_TOKEN`.
 

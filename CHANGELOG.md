@@ -3,6 +3,13 @@
 What changed in each release of mason, for the developers who install it. Install the engine and
 its skills from the same tag: each skill states the mason versions it works with.
 
+## Unreleased (0.6)
+
+- Credentials per project or per owner (`[credentials]`): an env file of its tokens, where its
+  `GH_TOKEN` comes from (an env variable or a `gh` login), the name and email on its commits,
+  and a GitHub Enterprise host. A project's runs, and mason's GitHub calls for it, see only its
+  own tokens. `mason doctor --repo` shows whose token a project uses, its scopes and its expiry.
+
 ## 0.5.0
 
 - `mason approve <id>` and `mason dismiss <id> --reason` decide an action a run left for you;

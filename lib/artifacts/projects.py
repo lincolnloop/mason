@@ -30,9 +30,12 @@ class ProjectError(Exception):
     pass
 
 
-def gh(args: Sequence[str]) -> tuple[int, str, str]:
+def gh(args: Sequence[str], env: Mapping[str, str] | None = None) -> tuple[int, str, str]:
     try:
-        result = subprocess.run(['gh', *args], capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            ['gh', *args], capture_output=True, text=True, check=False,
+            env=dict(env) if env is not None else None,
+        )  # fmt: skip
     except FileNotFoundError as exc:
         raise ProjectError('gh is not installed') from exc
     return result.returncode, result.stdout, result.stderr

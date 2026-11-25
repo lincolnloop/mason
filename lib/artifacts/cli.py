@@ -20,6 +20,7 @@ from typing import Any
 from . import (
     assessment,
     collect,
+    credentials,
     deps,
     detect,
     diff,
@@ -375,6 +376,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     cmd.add_argument(
         '--unattended', action='store_true', help='also check for a long-lived Claude token'
+    )
+    cmd.add_argument(
+        '--repo', help="owner/name: also check this project's credentials and its GitHub token"
     )
 
     cmd = commands.add_parser(
@@ -1225,6 +1229,17 @@ def _doctor(args: argparse.Namespace) -> str:
     except skills.SkillError as exc:
         raise Refused(str(exc)) from exc
     checks += doctor.check_skills(found, version.package_version(), args.workflow)
+    if args.repo:
+        try:
+            print(credentials.load(args.repo).describe(), file=sys.stderr)
+            environ = credentials.environment(args.repo)
+        except (credentials.CredentialError, ValueError) as exc:
+            checks.append(doctor.Check('credentials', doctor.FAIL, str(exc)))
+        else:
+            checks += [
+                doctor.Check('github token', status, detail)
+                for status, detail in credentials.token_checks(environ)
+            ]
     report = doctor.render(checks)
     if doctor.failed(checks):
         raise Refused(report.rstrip('\n'))
@@ -1337,6 +1352,10 @@ def _run(args: argparse.Namespace) -> str:
             skill_file,
         )  # fmt: skip
         env = dict(os.environ)
+    try:
+        env = credentials.environment(repo, base=env)
+    except credentials.CredentialError as exc:
+        raise Refused(f'{exc}\n{args.workflow} not started') from exc
     if period:
         env['MASON_PERIOD'] = period
     if args.dry_run:
@@ -1420,6 +1439,7 @@ def _project_add(args: argparse.Namespace) -> str:
         if not workflows and not args.yes:
             print(f'Workflows for {args.repo}:\n{projects.menu()}', file=sys.stderr)
             workflows = projects.choose(_ask('Enable which (numbers or names; Enter for all)? '))
+        _as_project(args.repo)
         plan = projects.plan(args.repo, workflows or sorted(skills.workflows()))
         print(plan.describe(), file=sys.stderr)
         if args.dry_run:
@@ -1458,6 +1478,7 @@ def _inbox(args: argparse.Namespace) -> str:
 
 
 def _approve(args: argparse.Namespace) -> str:
+    _as_project(args.repo)
     try:
         item = inbox.describe(args.repo, args.id)
     except inbox.InboxError as exc:
@@ -1534,7 +1555,16 @@ def _result(value: str, repo: str) -> results.Result:
         raise Refused(str(exc)) from exc
 
 
+def _as_project(repo: str) -> None:
+    """Run the rest of this command with the project's own credentials."""
+    try:
+        credentials.activate(repo)
+    except (credentials.CredentialError, ValueError) as exc:
+        raise Refused(str(exc)) from exc
+
+
 def _publish(args: argparse.Namespace) -> str:
+    _as_project(args.repo)
     result = _result(args.result, args.repo)
     try:
         targets = args.to or project.value(args.repo, result.workflow, 'publish') or []

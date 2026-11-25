@@ -154,8 +154,10 @@ What makes it safe to run more workflows, from more sources, on more projects.
   tokens that run needs.
 - **Untrusted input:** issue and PR text, Sentry events and package metadata are treated as data
   throughout, with tests for prompt injection in the workflows that read them.
-- **Credentials per project:** projects in different organisations with different tokens; a bot
-  account so PRs don't appear as the developer; `doctor` checks token scopes and expiry.
+- **Credentials per project** (built): `[credentials]` per project or per owner (an env file,
+  where `GH_TOKEN` comes from, the commit identity, a GitHub Enterprise host); a project's work
+  sees only its own tokens; `mason doctor --repo` shows whose token it is, its scopes and when it
+  expires. A bot account is a matter of using its token.
 
 ## Later
 

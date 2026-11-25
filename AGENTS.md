@@ -45,8 +45,8 @@ Style: single quotes, 100-character lines, explicit type hints, ruff for lint an
   `mason project list`, `archive [--undo]` and `remove`
 - A project's resolved configuration:
   `uv run mason config <project> [--toml]`
-- Check the prerequisites (tools, `gh` login, a workflow's tokens):
-  `uv run mason doctor [--workflow <name>] [--unattended]`
+- Check the prerequisites (tools, `gh` login, a workflow's tokens, a project's credentials):
+  `uv run mason doctor [--workflow <name>] [--unattended] [--repo <owner>/<repo>]`
 - Run a workflow unattended:
   `uv run mason run <workflow> --repo <owner>/<repo> --unattended [--pr N] [--dry-run]`
 - A workflow's result, kept as mason's master copy, then published:
