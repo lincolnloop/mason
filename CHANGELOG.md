@@ -3,6 +3,14 @@
 What changed in each release of mason, for the developers who install it. Install the engine and
 its skills from the same tag: each skill states the mason versions it works with.
 
+## Unreleased (0.3)
+
+- Results: `mason save-result` keeps a workflow's output in mason, per project, as the master
+  copy; `mason publish` copies it to a discussion or a directory and records each copy;
+  `mason results` lists them, and marks copies older than the master.
+- `dependency-report` saves its report first, then publishes it where its `publish` setting says
+  (by default a discussion, as before). It needs this mason: reinstall the skills.
+
 ## 0.2.0
 
 Workflows become installable skills: a project chooses its workflows and the skill for each, and

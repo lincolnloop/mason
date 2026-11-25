@@ -256,11 +256,16 @@ produced.
 
 ### 8.1 The results directory
 
+*Built in 0.3 (plan step 6): `mason save-result`, `mason publish`, `mason results`, with
+`dependency-report` saving first. Each result's `meta.json` holds its title, the file to
+publish, when it was saved and the run that saved it; `issue` targets, a comment on a
+discussion when its master changes, and moving the other workflows are still to come.*
+
 Each project gets a results directory under `XDG_DATA_HOME`, the XDG directory for data a
 person keeps, not under `XDG_STATE_HOME` beside the runs:
 
 ```
-~/.local/share/mason/<owner>/<repo>/results/
+~/.local/share/mason/results/<owner>/<repo>/
   dependency-report/2026-10/
     report.json        the data, in the workflow's schema (dependency-report/1)
     report.md          the rendered result
@@ -361,7 +366,7 @@ the project's history, and into every other developer's checkout.
 They are kept as results too, without a workflow:
 
 ```
-~/.local/share/mason/<owner>/<repo>/results/
+~/.local/share/mason/results/<owner>/<repo>/
   notes/2026-11-23-workflow-orchestration/
     note.md            the analysis, as written
     meta.json          title, created, updated, status, tags, links
@@ -558,7 +563,7 @@ Each step can ship by itself. `docs/roadmap.md` places them in releases: steps 1
 | 3 | settings declared by skills (`settings.toml`); workflow entries removed from `project.SECTIONS` (built) | none |
 | 4 | tool requests and grants; workflows from other sources (built; from the project itself, not yet) | new workflows without engine changes |
 | 5 | per-skill provenance (built); `run/2` moved to step 8 | published records name the skill's source |
-| 6 | results directory, `save-result`, `mason publish`; `dependency-report` moved to it | reports kept per project, published where settings say |
+| 6 | results directory, `save-result`, `mason publish`; `dependency-report` moved to it (built) | reports kept per project, published where settings say |
 | 7 | `mason note` and the `notes` skill | analyses kept per project, out of the project's history |
 | 8 | schedules, periods and the ledger; `mason status`, `due`, `overdue`, `history`, `skip`, `schedule set` | what is done, due and overdue, across projects |
 | 9 | `mason run-due` and `mason schedule install`; consolidation inputs | one heartbeat runs everything on its schedule |

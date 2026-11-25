@@ -49,6 +49,9 @@ Style: single quotes, 100-character lines, explicit type hints, ruff for lint an
   `uv run mason doctor [--workflow <name>] [--unattended]`
 - Run a workflow unattended:
   `uv run mason run <workflow> --repo <owner>/<repo> --unattended [--pr N] [--dry-run]`
+- A workflow's result, kept as mason's master copy, then published:
+  `uv run mason save-result <files> --run <run.json> --key <key> --title <t> --body <file.md>`,
+  `uv run mason publish <workflow>/<key> --repo <owner>/<repo> [--to <target>]`, `mason results`
 - What needs the developer: `uv run mason inbox [--repo <owner>/<repo>] [--count] [--json]`
 - Everything else: `uv run mason --help`
 - After changing dependencies in `pyproject.toml`: `uv lock`, and commit `uv.lock` with it.

@@ -1,9 +1,9 @@
 ---
 name: dependency-report
-description: 'This skill should be used when asked to "run the dependency report", "write the monthly security report", "report the vulnerabilities fixed this month", "publish the dependency report for <month>" or "backfill the dependency reports", in a project, interactively or unattended (from a scheduler or another agent). A script counts one calendar month of the Dependabot alert history: vulnerabilities and alerts fixed, still open, and time to fix against targets, for the month and the year so far. This skill adds a plain-language account of what is still open and the plan for it, and publishes the report as a new post in the project''s Discussions, for the people the project answers to.'
-version: 1.3.0
+description: 'This skill should be used when asked to "run the dependency report", "write the monthly security report", "report the vulnerabilities fixed this month", "publish the dependency report for <month>" or "backfill the dependency reports", in a project, interactively or unattended (from a scheduler or another agent). A script counts one calendar month of the Dependabot alert history: vulnerabilities and alerts fixed, still open, and time to fix against targets, for the month and the year so far. This skill adds a plain-language account of what is still open and the plan for it, keeps the report as mason''s copy, and publishes it where the project''s settings say (by default a new post in its Discussions), for the people the project answers to.'
+version: 1.4.0
 metadata:
-  mason-requires: '>=0.2,<0.3'
+  mason-requires: '>=0.3,<0.4'
   mason-task: 'Run the dependency report for this project'
   mason-github: 'alerts, discussions'
 ---
@@ -44,6 +44,7 @@ report: `mason defer <RUN> --action '<what to do>' --reason '<why it needs a per
 | Action | Level |
 |---|---|
 | Read alerts, issues and PRs; collect and render the report | Unattended |
+| Save the report as mason's copy (`mason save-result`) | Unattended |
 | Publish the report | Interactive: confirm first, showing the headline and the notes. Unattended: publish |
 | Edit, replace or delete a published report | Never: a correction is a comment a person posts |
 | Change alert state; open issues or PRs | Never |
@@ -130,7 +131,7 @@ would make the month look better than it was. So:
 
 If nothing was open at the end of the month, write nothing: leave the notes out.
 
-## Step 5: Render and publish
+## Step 5: Render, save and publish
 
 ```sh
 mason render-report $RUN/report-<YYYY-MM>.json --run $RUN/run.json --notes $RUN/notes-<YYYY-MM>.md -o $RUN/body-<YYYY-MM>.md
@@ -138,21 +139,35 @@ mason render-report $RUN/report-<YYYY-MM>.json --run $RUN/run.json --notes $RUN/
 
 Read the rendered headline (the first line) and check that the notes read well under it.
 
-Interactive: show the person the title, the headline and the notes, and publish once they confirm.
-Unattended: publish.
+Save the report as mason's copy of this month's result. That copy is the master: what is
+published is made from it, and it stays when a published copy is deleted or edited.
 
 ```sh
-mason post-discussion $PROJECT --category '<category>' --title '<title>' --body-file $RUN/body-<YYYY-MM>.md
+mason save-result $RUN/report-<YYYY-MM>.json $RUN/notes-<YYYY-MM>.md --run $RUN/run.json --key <YYYY-MM> --title '<title>' --body $RUN/body-<YYYY-MM>.md
 ```
 
-It prints the new discussion's URL. It refuses if the category doesn't exist (a person creates it
-in the repository's Discussions tab), or if a discussion with the same title is already in it.
-That month has been reported: don't retry under another title. Say so, with the existing link.
+It validates the report's data first, and keeps an earlier version of the same month if there
+is one. Then publish it where the project's settings say (`[dependency-report] publish`, by
+default a new discussion in the `category`):
+
+Interactive: show the person the title, the headline and the notes, and publish once they
+confirm. Unattended: publish.
+
+```sh
+mason publish dependency-report/<YYYY-MM> --repo <repo.name>
+```
+
+It prints where each copy went. A discussion target refuses if the category doesn't exist (a
+person creates it in the repository's Discussions tab), or if a discussion with the same title
+is already in it. That month has been reported: don't retry under another title. Say so, with
+the existing link. The report is saved either way; `mason results --repo <repo.name>` shows it
+and where it was published.
 
 ## Step 6: Finish
 
 Give, as your final answer:
-- each published report's link, or why it wasn't published;
+- where the report was saved (`mason save-result` prints it), and each published copy's link, or
+  why it wasn't published;
 - its headline line, as rendered;
 - **Needs a person:** a missing category, a month already reported, or open groups with no tracked
   work (they may want an issue).
@@ -165,4 +180,4 @@ Then, on every path: `mason lock release $PROJECT dependency-report`.
 - Edit, replace or delete a published report, or post a second one for the same month.
 - Name people, or quote their comments.
 - Describe a plan that isn't written down in the project's issues or PRs.
-- Publish to any category but the configured one.
+- Publish anywhere but where the project's settings say (`mason publish` with no `--to`).

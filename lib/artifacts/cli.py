@@ -32,6 +32,7 @@ from . import (
     projects,
     render,
     report,
+    results,
     review_context,
     review_outcomes,
     run,
@@ -449,6 +450,36 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument(
         '--command', dest='suggested', help='the command that would do it, if there is one'
     )
+
+    cmd = commands.add_parser(
+        'save-result', help="keep a run's output as the result for a key: mason's master copy"
+    )
+    cmd.add_argument('files', type=Path, nargs='*', help='the files to keep, its data among them')
+    cmd.add_argument('--run', type=Path, required=True, help="the run's run.json")
+    cmd.add_argument('--key', required=True, help='what names the result, e.g. 2026-10')
+    cmd.add_argument('--title', required=True, help='its title wherever it is published')
+    cmd.add_argument('--body', type=Path, required=True, help='the markdown file to publish')
+
+    cmd = commands.add_parser(
+        'publish', help='copy a result to where the settings say, or to --to; records each copy'
+    )
+    cmd.add_argument('result', help='<workflow>/<key>, as `mason results` lists them')
+    cmd.add_argument('--repo', required=True, help='owner/name')
+    cmd.add_argument(
+        '--to',
+        action='append',
+        default=[],
+        help="discussion[:<category>] or file:<directory>; repeatable (default: the workflow's "
+        '`publish` setting)',
+    )
+
+    cmd = commands.add_parser('results', help="a project's results, and where each was published")
+    cmd.add_argument(
+        '--repo', action='append', default=[], help='owner/name (default: every project)'
+    )
+    cmd.add_argument('--workflow', help='only this workflow')
+    cmd.add_argument('--remove', metavar='WORKFLOW/KEY', help='delete this result (asks first)')
+    cmd.add_argument('--yes', action='store_true', help='with --remove: ask nothing')
 
     cmd = commands.add_parser('lock', help='take or release the one-run-at-a-time lock')
     cmd.add_argument('action', choices=('acquire', 'release'))
@@ -1268,6 +1299,60 @@ def _defer(args: argparse.Namespace) -> str:
         raise Refused(str(exc)) from exc
 
 
+def _save_result(args: argparse.Namespace) -> str:
+    try:
+        saved = results.save(args.run, args.key, args.files, args.body, args.title)
+    except results.ResultError as exc:
+        raise Refused(str(exc)) from exc
+    return f'{saved}\n'
+
+
+def _result(value: str, repo: str) -> results.Result:
+    workflow, _, key = value.partition('/')
+    if not key:
+        raise Refused(f'{value}: give <workflow>/<key>, e.g. dependency-report/2026-10')
+    try:
+        return results.load(repo, workflow, key)
+    except results.ResultError as exc:
+        raise Refused(str(exc)) from exc
+
+
+def _publish(args: argparse.Namespace) -> str:
+    result = _result(args.result, args.repo)
+    try:
+        targets = args.to or project.value(args.repo, result.workflow, 'publish') or []
+        category = project.value(args.repo, result.workflow, 'category')
+    except project.ConfigError as exc:
+        raise Refused(str(exc)) from exc
+    if not targets:
+        return f'{args.result}: kept, not published (its `publish` setting is empty)\n'
+    lines = []
+    for target in targets:
+        try:
+            lines.append(f'{target}: {results.publish(result, target, collect.gh, category)}')
+        except (results.ResultError, collect.CollectError) as exc:
+            raise Refused('\n'.join([*lines, f'{target}: {exc}'])) from exc
+    return '\n'.join(lines) + '\n'
+
+
+def _results(args: argparse.Namespace) -> str:
+    repos = args.repo or projects.added()
+    if args.remove:
+        if len(repos) != 1:
+            raise Refused('--remove: give the project with --repo')
+        result = _result(args.remove, repos[0])
+        print(f"Deleting {result.path}, mason's copy of {args.remove}.", file=sys.stderr)
+        if not args.yes and _ask('Delete it? [y/N] ').strip().lower() not in ('y', 'yes'):
+            return 'Nothing deleted.\n'
+        return results.remove(result)
+    try:
+        return ''.join(
+            f'{repo}\n' + results.render(results.listing(repo, args.workflow)) for repo in repos
+        )
+    except results.ResultError as exc:
+        raise Refused(str(exc)) from exc
+
+
 def _lock(args: argparse.Namespace) -> str:
     try:
         repo = project.load(args.project)['repo']['name']
@@ -1291,6 +1376,9 @@ COMMANDS = {
     'project': _project,
     'inbox': _inbox,
     'defer': _defer,
+    'save-result': _save_result,
+    'publish': _publish,
+    'results': _results,
     'run': _run,
     'skills': _skills,
     'validate': _validate,

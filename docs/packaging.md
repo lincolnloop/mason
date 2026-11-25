@@ -166,7 +166,7 @@ Per developer, outside every repository:
   progress, and a developer doesn't need the project checked out at all.
 - Nothing here is needed by anyone else. Losing working files and logs loses no records.
 - **Results are records, and kept elsewhere.** What a workflow produces is saved under
-  `~/.local/share/mason/<owner>/<repo>/results/`, and that copy is the master until the developer
+  `~/.local/share/mason/results/<owner>/<repo>/`, and that copy is the master until the developer
   removes it; anything published is a copy of it (`docs/workflows.md` §8).
 - The lock stops overlapping runs on one machine. Across machines and developers, the GitHub
   checks in principle 6 do it ("an upgrade PR is already open", "October is already reported").

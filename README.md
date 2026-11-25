@@ -241,6 +241,25 @@ Nothing in it is kept by hand: each item comes from GitHub (open PRs and issues 
 `automation` label) and this machine's run records, every time. Merging the PR, answering the
 issue, or a later run of the same workflow clears it.
 
+## What mason keeps
+
+A workflow's result (a monthly report, say) is kept by mason before it is published, and that
+copy is the master: what goes to a discussion or a shared folder is a copy of it, and it stays
+when a copy is edited or deleted. Results are kept per project, under
+`~/.local/share/mason/results/<owner>/<repo>/<workflow>/<key>/`.
+
+```sh
+mason results --repo <owner>/<repo>                                  # each result, and where it went
+mason publish dependency-report/2026-10 --repo <owner>/<repo>        # where the settings say
+mason publish dependency-report/2026-10 --repo <owner>/<repo> --to file:~/Reports/
+mason results --repo <owner>/<repo> --remove dependency-report/2026-10
+```
+
+A workflow publishes to its `publish` setting (`[dependency-report] publish =
+['discussion', 'file:~/Reports/']`); an empty list keeps the result without publishing it. A
+re-run keeps the earlier version beside the new one, and `mason results` marks copies made from
+an older version.
+
 ## Layout
 
 ```

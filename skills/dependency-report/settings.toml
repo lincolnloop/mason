@@ -7,6 +7,13 @@ type = 'str'
 required = true
 default = 'Dependency reports'
 
+# Where the report is published from mason's copy (`mason publish`): `discussion` (in
+# `category`), `discussion:<category>`, or `file:<directory>`. Empty: kept, not published.
+[publish]
+type = 'list'
+required = true
+default = ['discussion']
+
 # Manifest globs for where each vulnerable package is. None set: Dependabot's guess.
 [production]
 type = 'list'

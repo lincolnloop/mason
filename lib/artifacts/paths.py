@@ -6,6 +6,7 @@ The XDG base directories, with their usual defaults:
     $XDG_CONFIG_HOME/mason/projects/<owner>/<repo>.toml   settings for one project
     $XDG_STATE_HOME/mason/<owner>/<repo>/                 runs, locks and logs for one project
     $XDG_CACHE_HOME/mason/repos/<owner>/<repo>/           mason's own clone of a project
+    $XDG_DATA_HOME/mason/results/<owner>/<repo>/          what workflows produced: the master copy
     $XDG_DATA_HOME/mason/.claude/skills/                  mason's skills, when they are installed
                                                           for mason's sessions only
 
@@ -82,6 +83,13 @@ def clone(repo: str, env: Mapping[str, str] | None = None) -> Path:
     """mason's own clone of a project, for runs named by repository rather than a checkout."""
     owner, name = _parts(repo)
     return cache_home(env) / 'repos' / owner / name
+
+
+def results(repo: str, env: Mapping[str, str] | None = None) -> Path:
+    """What workflows produced for one project, kept as the master copy (results.py). Under the
+    data directory, not the state directory: these are kept, not thrown away."""
+    owner, name = _parts(repo)
+    return data_home(env) / 'results' / owner / name
 
 
 def runs(repo: str, env: Mapping[str, str] | None = None) -> Path:

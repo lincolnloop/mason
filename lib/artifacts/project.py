@@ -403,3 +403,14 @@ def skill_paths(repo: str, env: Mapping[str, str] | None = None) -> dict[str, st
 def grants(repo: str, env: Mapping[str, str] | None = None) -> dict[str, list[str]]:
     """workflow -> the tools the developer has granted its mapped skill (`[grants]`)."""
     return {name: list(tools) for name, tools in settings(repo, env).get('grants', {}).items()}
+
+
+def value(repo: str, section: str, key: str, env: Mapping[str, str] | None = None) -> Any:
+    """One setting from the developer's settings file, or its declared default: for commands
+    that work from a project's name rather than its checkout, and need no detected value."""
+    found = settings(repo, env)
+    if key in found.get(section, {}):
+        return found[section][key]
+    declared = schema(found.get('skills'), env).get(section)
+    setting = declared.keys.get(key) if declared else None
+    return setting.default if setting else None
