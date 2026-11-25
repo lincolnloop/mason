@@ -114,7 +114,7 @@ Results kept by mason as the master copy, published wherever the developer choos
 - `dependency-report` (built), then the retrospectives, the assessment and Sentry triage, moved to save
   first and publish where the settings say.
 - `mason note` and the `notes` skill, for analyses and assessments kept out of the project's
-  history.
+  history (built).
 
 ## 0.4: schedules and status
 

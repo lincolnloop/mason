@@ -260,6 +260,23 @@ A workflow publishes to its `publish` setting (`[dependency-report] publish =
 re-run keeps the earlier version beside the new one, and `mason results` marks copies made from
 an older version.
 
+### Notes
+
+Analyses and assessments (a design review, an investigation, an option paper) are kept in mason
+too, per project, rather than in a `docs/notes/` folder in the project's history. Each has a
+status that says what became of it:
+
+```sh
+mason note save analysis.md --repo <owner>/<repo> --title 'Workflow orchestration' --status proposed
+mason note list --repo <owner>/<repo>
+mason note show 2026-11-25-workflow-orchestration --repo <owner>/<repo>
+mason note status 2026-11-25-workflow-orchestration adopted --repo <owner>/<repo> --link <PR>
+```
+
+`--repo` can be left out in a checkout of the project. The `notes` skill tells an agent when and
+how to use them, including reading earlier notes before a new analysis; install the skills with
+`--global` to ask for it in any session.
+
 ## Layout
 
 ```

@@ -26,6 +26,7 @@ from . import (
     embed,
     inbox,
     lock,
+    notes,
     outcomes,
     paths,
     project,
@@ -480,6 +481,32 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument('--workflow', help='only this workflow')
     cmd.add_argument('--remove', metavar='WORKFLOW/KEY', help='delete this result (asks first)')
     cmd.add_argument('--yes', action='store_true', help='with --remove: ask nothing')
+
+    cmd = commands.add_parser(
+        'note', help="keep an analysis or assessment in mason, out of the project's history"
+    )
+    action = cmd.add_subparsers(dest='action', required=True)
+    repo_help = 'owner/name (default: the checkout in the current directory)'
+    sub = action.add_parser('save', help='save a new note, or a new version of one with --update')
+    sub.add_argument('file', type=Path, help='the note, as markdown')
+    sub.add_argument('--repo', help=repo_help)
+    sub.add_argument('--title', help='its title (required for a new note)')
+    sub.add_argument('--update', metavar='KEY', help='save a new version of this note')
+    sub.add_argument('--status', default='draft', choices=notes.STATUSES)
+    sub.add_argument('--tag', action='append', default=[], help='repeatable')
+    sub = action.add_parser('list', help="a project's notes (default: every project's)")
+    sub.add_argument('--repo', help=repo_help)
+    sub.add_argument('--status', choices=notes.STATUSES)
+    sub.add_argument('--tag')
+    sub = action.add_parser('show', help='print a note')
+    sub.add_argument('key')
+    sub.add_argument('--repo', help=repo_help)
+    sub = action.add_parser('status', help='record what happened to a note')
+    sub.add_argument('key')
+    sub.add_argument('status', choices=notes.STATUSES)
+    sub.add_argument('--repo', help=repo_help)
+    sub.add_argument('--link', help='where the project now keeps it: a PR, an issue, a page')
+    sub.add_argument('--by', dest='superseded_by', metavar='KEY', help='for superseded: the note')
 
     cmd = commands.add_parser('lock', help='take or release the one-run-at-a-time lock')
     cmd.add_argument('action', choices=('acquire', 'release'))
@@ -1353,6 +1380,31 @@ def _results(args: argparse.Namespace) -> str:
         raise Refused(str(exc)) from exc
 
 
+def _note_repo(given: str | None) -> str | None:
+    if given:
+        return given
+    return detect.repo_name(Path.cwd()) if (Path.cwd() / '.git').exists() else None
+
+
+def _note(args: argparse.Namespace) -> str:
+    repo = _note_repo(args.repo)
+    try:
+        if args.action == 'list':
+            repos = [repo] if repo else projects.added()
+            found = [notes.render_list(r, notes.listing(r, args.status, args.tag)) for r in repos]
+            return ''.join(found) or 'No projects added yet.\n'
+        if repo is None:
+            raise Refused('give --repo, or run it in a checkout of the project')
+        if args.action == 'save':
+            key = notes.save(repo, args.file, args.title, args.update, args.status, args.tag)
+            return f'Saved note {key} for {repo}\n'
+        if args.action == 'show':
+            return notes.show(notes.load(repo, args.key))
+        return notes.set_status(repo, args.key, args.status, args.link, args.superseded_by)
+    except (notes.NoteError, results.ResultError) as exc:
+        raise Refused(str(exc)) from exc
+
+
 def _lock(args: argparse.Namespace) -> str:
     try:
         repo = project.load(args.project)['repo']['name']
@@ -1379,6 +1431,7 @@ COMMANDS = {
     'save-result': _save_result,
     'publish': _publish,
     'results': _results,
+    'note': _note,
     'run': _run,
     'skills': _skills,
     'validate': _validate,

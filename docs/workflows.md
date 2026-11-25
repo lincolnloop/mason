@@ -358,6 +358,11 @@ publish = ['discussion:Security reports', 'file:~/Reports/acme-app/']
 
 ### 8.5 Analyses and assessments
 
+*Built in 0.3 (plan step 7). A note is a result under the `notes` name, so `mason publish` and
+`mason results` work for it; its status, tags and links are in the same `meta.json` as any
+result, checked by the code rather than a published schema, since a note's data never leaves
+mason. `mason note show <key>` prints one.*
+
 Not every result comes from a workflow. A developer asks an agent to analyse something (a design
 review, an investigation, an option paper, an assessment of a library) and keeps the answer.
 Today these go in the project's `docs/notes/`, which puts work that may never be acted on into
@@ -564,7 +569,7 @@ Each step can ship by itself. `docs/roadmap.md` places them in releases: steps 1
 | 4 | tool requests and grants; workflows from other sources (built; from the project itself, not yet) | new workflows without engine changes |
 | 5 | per-skill provenance (built); `run/2` moved to step 8 | published records name the skill's source |
 | 6 | results directory, `save-result`, `mason publish`; `dependency-report` moved to it (built) | reports kept per project, published where settings say |
-| 7 | `mason note` and the `notes` skill | analyses kept per project, out of the project's history |
+| 7 | `mason note` and the `notes` skill (built) | analyses kept per project, out of the project's history |
 | 8 | schedules, periods and the ledger; `mason status`, `due`, `overdue`, `history`, `skip`, `schedule set` | what is done, due and overdue, across projects |
 | 9 | `mason run-due` and `mason schedule install`; consolidation inputs | one heartbeat runs everything on its schedule |
 | 10 | plugin packages | only if a workflow needs its own code |

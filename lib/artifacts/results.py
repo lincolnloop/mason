@@ -54,7 +54,7 @@ def _json(path: Path) -> Any:
         raise ResultError(f'{path}: is not valid JSON: {exc}') from exc
 
 
-def _write(path: Path, data: Any) -> None:
+def write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
 
 
@@ -113,7 +113,7 @@ def save(
     for path in files:
         shutil.copy2(path, target / path.name)
     shutil.copy2(run_file, target / RUN)
-    _write(
+    write_json(
         target / META,
         {
             'workflow': workflow,
@@ -214,7 +214,7 @@ def publish(
     result.published.append(
         {'target': target, 'where': where, 'at': _now(now), 'version': result.meta['saved_at']}
     )
-    _write(result.path / PUBLISHED, result.published)
+    write_json(result.path / PUBLISHED, result.published)
     return where
 
 
