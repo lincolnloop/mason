@@ -6,7 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from artifacts import inbox, ledger, paths, project, results, run, rundue, runner, schedules, skills
@@ -505,6 +505,52 @@ class CliTests(Clean):
         self.assertEqual(period, schedules.current_key('monthly', 'report', datetime.now()))
         result = self.mason('run-start', str(checkout), 'dependency-report', '--period', 'soon')
         self.assertIn('not a period key', result.stderr)
+
+
+class RetrospectivePeriodTests(unittest.TestCase):
+    """The retrospectives' collectors cover the run's calendar period."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.run_file = Path(self._tmp.name) / 'run.json'
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def period(self, record: dict, since: str | None = None, period: str | None = None):
+        from argparse import Namespace
+
+        from artifacts.cli import _period
+
+        self.run_file.write_text(json.dumps(record))
+        return _period(Namespace(run=self.run_file, since=since, period=period), 30)
+
+    def test_the_runs_own_period(self) -> None:
+        since, until = self.period({'period': '2026-10'})
+        self.assertEqual(since, datetime(2026, 10, 1).astimezone().astimezone(UTC))
+        self.assertEqual(until, datetime(2026, 11, 1).astimezone().astimezone(UTC))
+
+    def test_period_and_since_override_it(self) -> None:
+        since, _ = self.period({'period': '2026-10'}, period='2026-09')
+        self.assertEqual(since, datetime(2026, 9, 1).astimezone().astimezone(UTC))
+        since, until = self.period({'period': '2026-10'}, since='2026-10-15')
+        self.assertEqual(since, datetime(2026, 10, 15, tzinfo=UTC))
+        self.assertGreater(until, datetime(2026, 11, 1, tzinfo=UTC))
+
+    def test_no_period_is_the_last_period_days(self) -> None:
+        since, until = self.period({})
+        self.assertEqual((until - since).days, 30)
+
+    def test_a_current_period_ends_now_and_a_future_one_is_refused(self) -> None:
+        from artifacts.cli import Refused
+
+        today = datetime.now()
+        _, until = self.period({'period': f'{today:%Y-%m}'})
+        self.assertLessEqual(until, datetime.now(UTC))
+        with self.assertRaisesRegex(Refused, 'has not started'):
+            self.period({'period': f'{today.year + 1}'})
+        with self.assertRaisesRegex(Refused, 'not a period key'):
+            self.period({'period': 'soon'})
 
 
 if __name__ == '__main__':

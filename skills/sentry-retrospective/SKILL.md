@@ -1,7 +1,7 @@
 ---
 name: sentry-retrospective
 description: 'This skill should be used when asked to "run the Sentry retrospective", "did the Sentry fixes work", "are the errors coming back" or "how are we doing on Sentry errors" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over sentry-errors: a script checks, for every fix PR, whether its Sentry issues stopped after the merge, and collects the triage issues and what is still unresolved. This skill judges why fixes didn''t work, what keeps recurring, and what the project should change so the same class of error doesn''t ship again. It opens one report issue, and proposes skill changes as a PR when the evidence warrants it.'
-version: 1.2.0
+version: 1.2.1
 metadata:
   mason-requires: '>=0.4,<0.5'
   mason-task: 'Run the Sentry retrospective for this project'
@@ -81,6 +81,10 @@ leave `--since` out.
 mason collect-sentry-outcomes $PROJECT --run $RUN/run.json [--since <until of the last one>] -o $RUN/outcomes.json
 ```
 
+When the run has a period (`period` in `$RUN/run.json`: `mason run` and `mason run-due` set
+it), leave `--since` out: the collector covers exactly that calendar period, so October's
+retrospective covers October. `--since` is for a run with no period.
+
 Read `mason schema sentry-outcomes` for what each field means.
 
 ## Step 4: Judge the outcomes
@@ -133,9 +137,9 @@ each. Then:
 mason render-sentry-retrospective $RUN/outcomes.json --run $RUN/run.json \
   --findings $RUN/findings/*.json -o $RUN/report.md
 mason save-result $RUN/outcomes.json $RUN/findings/*.json --run $RUN/run.json \
-  --key <period.until date> --title 'Sentry retrospective: <period.since date> to <period.until date>' \
+  --key <the run's period, or period.until date if it has none> --title 'Sentry retrospective: <period.since date> to <period.until date>' \
   --body $RUN/report.md
-mason publish sentry-retrospective/<period.until date> --repo <repo.name>
+mason publish sentry-retrospective/<that key> --repo <repo.name>
 ```
 
 The report is kept as mason's copy first (`save-result` validates its data), then published

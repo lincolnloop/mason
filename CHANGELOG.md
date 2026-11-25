@@ -3,6 +3,12 @@
 What changed in each release of mason, for the developers who install it. Install the engine and
 its skills from the same tag: each skill states the mason versions it works with.
 
+## Unreleased
+
+- The retrospectives cover the calendar period their run is for (`mason run` and `run-due` set
+  it), so October's covers exactly October, and their results are keyed by it. `--period` on the
+  collectors picks one by hand. Reinstall the skills.
+
 ## 0.4.0
 
 - Schedules: each workflow skill declares a default (`mason-schedule`, `mason-kind`), and a

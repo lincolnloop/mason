@@ -1,7 +1,7 @@
 ---
 name: code-review-retrospective
 description: 'This skill should be used when asked to "run the code review retrospective", "how are the automated reviews doing", "what do people do with the review findings" or "improve the code review skill" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over code-review: a script collects what happened to every finding the reviews posted over a period (whether the flagged lines changed, what a follow-up review concluded, what people replied), and this skill judges which findings people found right, wrong or not worth it. It opens one report issue, proposes changes to the review skill as a PR when a pattern holds across PRs, and proposes project rules where the project disagrees with the review.'
-version: 1.3.0
+version: 1.3.1
 metadata:
   mason-requires: '>=0.4,<0.5'
   mason-task: 'Run the code review retrospective for this project'
@@ -76,6 +76,10 @@ Step 4. If there is none, leave `--since` out.
 mason collect-review-outcomes $PROJECT --run $RUN/run.json [--since <until of the last one>] -o $RUN/outcomes.json
 ```
 
+When the run has a period (`period` in `$RUN/run.json`: `mason run` and `mason run-due` set
+it), leave `--since` out: the collector covers exactly that calendar period, so October's
+retrospective covers October. `--since` is for a run with no period.
+
 Read `mason schema review-outcomes` for what each field means.
 
 ## Step 4: Judge the outcomes
@@ -139,9 +143,9 @@ Validate each with `mason validate`. Then:
 mason render-review-retrospective $RUN/outcomes.json --run $RUN/run.json \
   --findings $RUN/findings/*.json -o $RUN/report.md
 mason save-result $RUN/outcomes.json $RUN/findings/*.json --run $RUN/run.json \
-  --key <period.until date> --title 'Code review retrospective: <period.since date> to <period.until date>' \
+  --key <the run's period, or period.until date if it has none> --title 'Code review retrospective: <period.since date> to <period.until date>' \
   --body $RUN/report.md
-mason publish code-review-retrospective/<period.until date> --repo <repo.name>
+mason publish code-review-retrospective/<that key> --repo <repo.name>
 ```
 
 The report is kept as mason's copy first (`save-result` validates its data), then published

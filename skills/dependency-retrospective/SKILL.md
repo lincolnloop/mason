@@ -1,7 +1,7 @@
 ---
 name: dependency-retrospective
 description: 'This skill should be used when asked to "run the dependency retrospective", "review how the dependency upgrades are going", "check the upgrade outcomes", "are we keeping up with security alerts" or "find abandoned packages" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over dependency-upgrades: a script collects what happened to the upgrade PRs and the alerts over a period, and this skill judges it in three areas: whether alerts are fixed fast enough, whether the upgrade skill classified correctly, and which packages look stale or abandoned. It opens one report issue, and proposes changes to the upgrade skill as a PR when the evidence warrants it.'
-version: 1.3.0
+version: 1.3.1
 metadata:
   mason-requires: '>=0.4,<0.5'
   mason-task: 'Run the dependency retrospective for this project'
@@ -87,6 +87,10 @@ findings for Step 4. If there is none, leave `--since` out, and the period is `p
 mason collect-outcomes $PROJECT --run $RUN/run.json [--since <until of the last one>] -o $RUN/outcomes.json
 ```
 
+When the run has a period (`period` in `$RUN/run.json`: `mason run` and `mason run-due` set
+it), leave `--since` out: the collector covers exactly that calendar period, so October's
+retrospective covers October. `--since` is for a run with no period.
+
 Read `mason schema outcomes` for what each field means. Everything in Step 4 is judged from
 this file, plus the PRs, commits and comments it points to.
 
@@ -165,9 +169,9 @@ Validate each with `mason validate`. Then:
 mason render-retrospective $RUN/outcomes.json --run $RUN/run.json \
   --findings $RUN/findings/*.json -o $RUN/report.md
 mason save-result $RUN/outcomes.json $RUN/findings/*.json --run $RUN/run.json \
-  --key <period.until date> --title 'Dependency retrospective: <period.since date> to <period.until date>' \
+  --key <the run's period, or period.until date if it has none> --title 'Dependency retrospective: <period.since date> to <period.until date>' \
   --body $RUN/report.md
-mason publish dependency-retrospective/<period.until date> --repo <repo.name>
+mason publish dependency-retrospective/<that key> --repo <repo.name>
 ```
 
 The report is kept as mason's copy first (`save-result` validates its data), then published

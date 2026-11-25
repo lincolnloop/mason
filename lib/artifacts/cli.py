@@ -118,6 +118,9 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument(
         '--since', help='start of the period (ISO date or time); default period_days ago'
     )
+    cmd.add_argument(
+        '--period', help="a calendar period to cover, e.g. 2026-10 (default: the run's own)"
+    )
     cmd.add_argument('-o', '--output', type=Path)
 
     cmd = commands.add_parser(
@@ -187,6 +190,9 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument(
         '--since', help='start of the period (ISO date or time); default period_days ago'
     )
+    cmd.add_argument(
+        '--period', help="a calendar period to cover, e.g. 2026-10 (default: the run's own)"
+    )
     cmd.add_argument('-o', '--output', type=Path)
 
     cmd = commands.add_parser(
@@ -215,6 +221,9 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument('--run', type=Path, required=True, help="the collecting run's run.json")
     cmd.add_argument(
         '--since', help='start of the period (ISO date or time); default period_days ago'
+    )
+    cmd.add_argument(
+        '--period', help="a calendar period to cover, e.g. 2026-10 (default: the run's own)"
     )
     cmd.add_argument('-o', '--output', type=Path)
 
@@ -649,7 +658,7 @@ def _collect_review_outcomes(args: argparse.Namespace) -> str:
         config = project.load(args.project, 'code-review-retrospective')
     except project.ConfigError as exc:
         raise Refused(str(exc)) from exc
-    since, until = _period(args.since, config['code-review-retrospective']['period_days'])
+    since, until = _period(args, config['code-review-retrospective']['period_days'])
     try:
         result = review_outcomes.collect(config['repo']['name'], record, since, until)
     except (collect.CollectError, ValueError, KeyError) as exc:
@@ -745,7 +754,7 @@ def _collect_sentry_outcomes(args: argparse.Namespace) -> str:
         raise Refused(str(exc)) from exc
     config = resolved.config
     settings, retro = config['sentry-errors'], config['sentry-retrospective']
-    since, until = _period(args.since, retro['period_days'])
+    since, until = _period(args, retro['period_days'])
     policy = {
         'quiet_after_days': settings['quiet_after_days'],
         'deploy_grace_hours': retro['deploy_grace_hours'],
@@ -781,9 +790,31 @@ def _render_sentry_retrospective(args: argparse.Namespace) -> str:
         raise Refused(str(exc)) from exc
 
 
-def _period(since_arg: str | None, period_days: int) -> tuple[datetime, datetime]:
-    until = datetime.now(UTC)
+def _period(args: argparse.Namespace, period_days: int) -> tuple[datetime, datetime]:
+    """What a retrospective covers: from `--since` to now; or the calendar period, from
+    `--period` or the run's own record (`mason run` and `run-due` set it), so October's
+    retrospective covers exactly October; or else the last `period_days`."""
+    now = datetime.now(UTC)
+    key = getattr(args, 'period', None)
+    if key is None and not args.since:
+        try:
+            key = json.loads(args.run.read_text(encoding='utf-8')).get('period')
+        except (OSError, json.JSONDecodeError, AttributeError):
+            key = None
+    if key and not args.since:
+        try:
+            period = schedules.from_key(key)
+        except schedules.ScheduleError as exc:
+            raise Refused(f'--period: {exc}') from exc
+        # Periods are in the machine's local time; the records compared with them are UTC.
+        since = period.start.astimezone().astimezone(UTC)
+        until = min(period.end.astimezone().astimezone(UTC), now)
+        if since >= now:
+            raise Refused(f'--period: {key} has not started yet')
+        return since, until
+    until = now
     since = until - timedelta(days=period_days)
+    since_arg = args.since
     if since_arg:
         try:
             since = datetime.fromisoformat(since_arg.replace('Z', '+00:00'))
@@ -873,7 +904,7 @@ def _collect_outcomes(args: argparse.Namespace) -> str:
         'stale_after_months': settings['stale_after_months'],
         'stale_pr_after_days': config['limits']['stale_after_days'],
     }
-    since, until = _period(args.since, settings['period_days'])
+    since, until = _period(args, settings['period_days'])
     repo = config['repo']['name']
     try:
         raw_prs = collect.upgrade_prs(repo)
