@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -39,6 +40,7 @@ from . import (
     review_context,
     review_outcomes,
     run,
+    rundue,
     runner,
     schedules,
     sentry,
@@ -500,6 +502,9 @@ def main(argv: list[str] | None = None) -> int:
         '--repo', action='append', default=[], help='owner/name (default: every project)'
     )
     cmd.add_argument('--workflow', help='only this workflow')
+    cmd.add_argument(
+        '--within', metavar='PERIOD', help='only results for periods inside this one, e.g. 2026-11'
+    )
     cmd.add_argument('--remove', metavar='WORKFLOW/KEY', help='delete this result (asks first)')
     cmd.add_argument('--yes', action='store_true', help='with --remove: ask nothing')
 
@@ -540,6 +545,14 @@ def main(argv: list[str] | None = None) -> int:
             cmd.add_argument('--within', help='also list what comes due within this, e.g. 7d')
 
     cmd = commands.add_parser(
+        'run-due', help='run every period that is due, unattended: what a scheduler starts'
+    )
+    cmd.add_argument('--repo', action='append', default=[], help='owner/name; repeatable')
+    cmd.add_argument('--dry-run', action='store_true', help='say what would run; run nothing')
+    cmd.add_argument('--trigger', default='mason run-due', help='what started it')
+    cmd.add_argument('--claude', default='claude', help='the claude executable')
+
+    cmd = commands.add_parser(
         'history', help="one workflow's periods on a project, and their state"
     )
     cmd.add_argument('repo', help='owner/name')
@@ -558,6 +571,14 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_argument('repo', help='owner/name')
     sub.add_argument('workflow')
     sub.add_argument('schedule', help="e.g. 'weekly mon 07:00', 'monthly day 2', 'off'")
+    sub = action.add_parser(
+        'install',
+        help='set up the heartbeat that starts `mason run-due`: a systemd timer, or a cron line',
+    )
+    how = sub.add_mutually_exclusive_group()
+    how.add_argument('--systemd', action='store_true', help='write a user timer and service')
+    how.add_argument('--cron', action='store_true', help='print the crontab line to add')
+    sub.add_argument('--every', type=int, default=15, help='minutes between starts (default 15)')
     cmd.add_argument('--repo', action='append', default=[], help='owner/name; repeatable')
 
     cmd = commands.add_parser('lock', help='take or release the one-run-at-a-time lock')
@@ -1451,9 +1472,10 @@ def _results(args: argparse.Namespace) -> str:
         return results.remove(result)
     try:
         return ''.join(
-            f'{repo}\n' + results.render(results.listing(repo, args.workflow)) for repo in repos
+            f'{repo}\n' + results.render(results.listing(repo, args.workflow, within=args.within))
+            for repo in repos
         )
-    except results.ResultError as exc:
+    except (results.ResultError, schedules.ScheduleError) as exc:
         raise Refused(str(exc)) from exc
 
 
@@ -1523,7 +1545,7 @@ def _status(args: argparse.Namespace) -> str:
 
 def _due(args: argparse.Namespace) -> str:
     rows = _rows(args)
-    text = ledger.render_open(rows, (ledger.DUE, ledger.OVERDUE, ledger.FAILED))
+    text = ledger.render_open(rows, (ledger.DUE, ledger.OVERDUE, ledger.FAILED, ledger.BLOCKED))
     if args.within:
         try:
             until = datetime.now() + schedules.duration(args.within)
@@ -1543,6 +1565,24 @@ def _overdue(args: argparse.Namespace) -> str:
     if text:
         raise Answer(text.rstrip('\n'))
     return 'Nothing is overdue.\n'
+
+
+def _run_due(args: argparse.Namespace) -> str:
+    try:
+        todo, notes = rundue.plan(_repos(args.repo))
+    except (project.ConfigError, ledger.LedgerError, schedules.ScheduleError) as exc:
+        raise Refused(str(exc)) from exc
+    if args.dry_run or not todo:
+        return rundue.describe(todo, notes)
+
+    def start(item: rundue.Planned) -> int:
+        return main(
+            ['run', item.workflow, '--repo', item.repo, '--unattended', '--period', item.period,
+             '--trigger', args.trigger, '--claude', args.claude]
+        )  # fmt: skip
+
+    lines = rundue.run_all(todo, start)
+    return '\n'.join([*lines, *(f'not run: {n}' for n in notes)]) + '\n'
 
 
 def _history(args: argparse.Namespace) -> str:
@@ -1575,7 +1615,35 @@ def _schedule(args: argparse.Namespace) -> str:
         except (project.ConfigError, schedules.ScheduleError, ValueError) as exc:
             raise Refused(str(exc)) from exc
         return f'{args.repo} {args.workflow}: {schedules.parse(args.schedule)}, in {path}\n'
+    if args.action == 'install':
+        return _install_heartbeat(args)
     return _status(args)
+
+
+def _install_heartbeat(args: argparse.Namespace) -> str:
+    if not 1 <= args.every <= 60:
+        raise Refused('--every: between 1 and 60 minutes')
+    mason = shutil.which('mason') or 'mason'
+    log = paths.state_home() / 'run-due.log'
+    if args.cron:
+        return rundue.cron_line(mason, args.every, str(log)) + '\n'
+    units = rundue.systemd_units(mason, args.every, str(paths.config_home() / 'env'))
+    if not args.systemd:
+        return (
+            'Either a systemd user timer (`mason schedule install --systemd` writes it):\n\n'
+            + ''.join(f'# {name}\n{text}\n' for name, text in units.items())
+            + 'or a crontab line (`crontab -e`):\n\n'
+            + rundue.cron_line(mason, args.every, str(log))
+            + '\n'
+        )
+    folder = Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config') / 'systemd' / 'user'
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, text in units.items():
+        (folder / name).write_text(text, encoding='utf-8')
+    return (
+        f'Wrote {", ".join(str(folder / n) for n in units)}. Start it with:\n'
+        f'  systemctl --user daemon-reload && systemctl --user enable --now {rundue.UNIT}.timer\n'
+    )
 
 
 def _lock(args: argparse.Namespace) -> str:
@@ -1610,6 +1678,7 @@ COMMANDS = {
     'due': _due,
     'overdue': _overdue,
     'history': _history,
+    'run-due': _run_due,
     'skip': _skip,
     'schedule': _schedule,
     'run': _run,

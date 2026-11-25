@@ -18,19 +18,20 @@ from its due time until its grace has passed; **overdue** after that.
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from . import paths, project, schedules, skills
 
-DONE, SKIPPED, FAILED, DUE, OVERDUE, UPCOMING = (
+DONE, SKIPPED, FAILED, DUE, OVERDUE, UPCOMING, BLOCKED = (
     'done',
     'skipped',
     'failed',
     'due',
     'overdue',
     'upcoming',
+    'blocked',
 )
 SKIPS = 'skips.json'
 
@@ -51,11 +52,14 @@ class Facts:
     succeeded: dict[str, str]  # key -> the run that did it
     failed: dict[str, str]  # key -> a run (or log) that failed
     skipped: dict[str, str]  # key -> why
+    # key -> how many runs for it failed: `mason run-due` stops retrying after a few.
+    failures: dict[str, int] = field(default_factory=dict)
 
 
 def facts(repo: str, workflow: str, env: Mapping[str, str] | None = None) -> Facts:
     succeeded: dict[str, str] = {}
     failed: dict[str, str] = {}
+    failures: dict[str, int] = {}
     saved_by = set()
     root = paths.results(repo, env) / workflow
     for meta in root.glob('*/meta.json') if root.is_dir() else ():
@@ -76,6 +80,7 @@ def facts(repo: str, workflow: str, env: Mapping[str, str] | None = None) -> Fac
             succeeded[key] = record['id']
         elif record.get('outcome') == FAILED:
             failed.setdefault(key, record['id'])
+            failures[key] = failures.get(key, 0) + 1
     logs = paths.logs(repo, env)
     for status in sorted(logs.glob(f'*-{workflow}.status.json')) if logs.is_dir() else ():
         try:
@@ -84,10 +89,11 @@ def facts(repo: str, workflow: str, env: Mapping[str, str] | None = None) -> Fac
             continue
         if record.get('period') and record.get('status') != 0:
             failed.setdefault(record['period'], str(record.get('log', status)))
+            failures[record['period']] = failures.get(record['period'], 0) + 1
     skipped = {
         s['period']: s['reason'] for s in read_skips(repo, env) if s.get('workflow') == workflow
     }
-    return Facts(succeeded, failed, skipped)
+    return Facts(succeeded, failed, skipped, failures)
 
 
 def read_skips(repo: str, env: Mapping[str, str] | None = None) -> list[dict[str, Any]]:
@@ -168,12 +174,20 @@ def history(
     else:
         latest = schedules.slots(schedule, spec.kind, start, now + timedelta(seconds=1))
         start = latest[-1].due if latest else start
+    inputs = _inputs(repo, spec, env)
     found = []
     for s in schedules.slots(schedule, spec.kind, start, now + timedelta(seconds=1)):
+        waiting = (
+            inputs(s.key) if s.key not in known.succeeded and s.key not in known.skipped else []
+        )
         if s.key in known.succeeded:
             found.append(Slot(s.key, s.due, DONE, known.succeeded[s.key]))
         elif s.key in known.skipped:
             found.append(Slot(s.key, s.due, SKIPPED, known.skipped[s.key]))
+        elif waiting:
+            found.append(
+                Slot(s.key, s.due, BLOCKED, f'waiting for {spec.consumes} {", ".join(waiting)}')
+            )
         elif s.key in known.failed:
             found.append(Slot(s.key, s.due, FAILED, known.failed[s.key]))
         elif now < s.due + grace:
@@ -185,6 +199,26 @@ def history(
     return planned, found[-count:], following
 
 
+def _inputs(repo: str, spec: skills.Workflow, env: Mapping[str, str] | None):
+    """For a consolidating workflow: period key -> the periods of the workflow it consumes,
+    inside that one, that are not yet done or skipped."""
+    if not spec.consumes:
+        return lambda key: []
+    producer = skills.resolve(spec.consumes, project.skill_paths(repo, env), env)
+    if producer is None or producer.workflow is None:
+        return lambda key: [f'(not installed: {spec.consumes})']
+    interval = project.planned(repo, spec.consumes, producer.workflow, env).schedule.interval
+    known = facts(repo, spec.consumes, env)
+    settled = {*known.succeeded, *known.skipped}
+
+    def missing(key: str) -> list[str]:
+        if interval is None:
+            return [f'(not scheduled: {spec.consumes})']
+        return [k for k in schedules.within(key, interval) if k not in settled]
+
+    return missing
+
+
 @dataclass
 class Row:
     repo: str
@@ -193,7 +227,7 @@ class Row:
     source: str
     latest: Slot | None
     following: Slot | None
-    # Every slot that needs something: due, overdue or failed.
+    # Every slot that needs something: due, overdue, failed, or blocked on its inputs.
     open: list[Slot]
 
 
@@ -227,7 +261,7 @@ def overview(
                     planned.source,
                     slots[-1] if slots else None,
                     following,
-                    [s for s in slots if s.state in (DUE, OVERDUE, FAILED)],
+                    [s for s in slots if s.state in (DUE, OVERDUE, FAILED, BLOCKED)],
                 )
             )
     return rows

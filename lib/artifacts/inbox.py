@@ -285,6 +285,34 @@ def local_items(repo: str, workflows: Sequence[str], env: Mapping[str, str]) -> 
     return found
 
 
+def schedule_items(repo: str, env: Mapping[str, str]) -> list[Item]:
+    """Periods missed (overdue) and consolidations waiting on their inputs, from the ledger.
+    Failed runs are listed already, from how they ended."""
+    from . import ledger
+
+    found = []
+    try:
+        rows = ledger.overview([repo], env)
+    except (project.ConfigError, ledger.LedgerError) as exc:
+        return [Item(repo, BROKEN, "couldn't read the schedules", str(exc))]
+    for row in rows:
+        for s in row.open:
+            if s.state == ledger.OVERDUE:
+                text = f'{row.workflow} {s.key} is overdue (due {s.due:%Y-%m-%d %H:%M})'
+                where = f'mason run {row.workflow} --repo {repo} --period {s.key}, or mason skip'
+                found.append(Item(repo, BROKEN, text, where))
+            elif s.state == ledger.BLOCKED:
+                found.append(
+                    Item(
+                        repo,
+                        BLOCKED,
+                        f'{row.workflow} {s.key}: {s.detail}',
+                        f'mason history {repo} {row.workflow}',
+                    )
+                )
+    return found
+
+
 def collect(
     repos: Sequence[str] | None = None,
     run_gh: projects.Gh = projects.gh,
@@ -304,6 +332,7 @@ def collect(
             found.append(Item(repo, BROKEN, 'settings file is invalid', str(exc)))
             continue
         found += local_items(repo, workflows, env)
+        found += schedule_items(repo, env)
         found += github_items(repo, run_gh, now)
     return sorted(found, key=lambda i: (ORDER.index(i.kind), i.project))
 

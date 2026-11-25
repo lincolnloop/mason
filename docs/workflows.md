@@ -414,6 +414,11 @@ latest period judged. Run records gain `period` and the endings `done`, `nothing
 `failed` (`mason run-end`, which every workflow skill calls) as optional, additive fields, so
 `run/1` stays; `run/2` isn't needed. Times are the machine's local time.*
 
+*Built in 0.4 (plan step 9): `mason run-due`, `mason schedule install` (a systemd user timer, or
+a crontab line to add), consolidation (`mason-consumes`, the `blocked` state, `mason results
+--within`), and overdue and blocked periods in `mason inbox`. `--partial`, to consolidate a
+period with missing inputs, isn't built: skip the missing inputs instead.*
+
 Workflows run on a regular basis, and the useful question is less "can cron start it?" than
 "what was done, what is due, and what was missed?". Today mason can't answer that: schedules are
 systemd timers or cron lines written by hand (README), so mason doesn't know how often anything
@@ -584,7 +589,7 @@ Each step can ship by itself. `docs/roadmap.md` places them in releases: steps 1
 | 6 | results directory, `save-result`, `mason publish`; `dependency-report` moved to it (built) | reports kept per project, published where settings say |
 | 7 | `mason note` and the `notes` skill (built) | analyses kept per project, out of the project's history |
 | 8 | schedules, periods and the ledger; `mason status`, `due`, `overdue`, `history`, `skip`, `schedule set` (built) | what is done, due and overdue, across projects |
-| 9 | `mason run-due` and `mason schedule install`; consolidation inputs | one heartbeat runs everything on its schedule |
+| 9 | `mason run-due` and `mason schedule install`; consolidation inputs (built) | one heartbeat runs everything on its schedule |
 | 10 | plugin packages | only if a workflow needs its own code |
 
 ## 12. Open questions

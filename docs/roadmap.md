@@ -124,9 +124,9 @@ mason owns the schedule, and says what was done, what is due and what was missed
 - Schedules per workflow and project; calendar periods; the ledger, with each run's `period`
   and how it ended, added to `run/1` (built).
 - `mason status`, `due`, `overdue`, `history`, `skip`, `schedule set` (built).
-- `mason run-due` as a single heartbeat, and `mason schedule install`.
-- Consolidation inputs, for reports built from other reports.
-- The inbox gains overdue workflows and blocked consolidations.
+- `mason run-due` as a single heartbeat, and `mason schedule install` (built).
+- Consolidation inputs, for reports built from other reports (built).
+- The inbox gains overdue workflows and blocked consolidations (built).
 
 ## 0.5: following work through
 

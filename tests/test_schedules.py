@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -8,7 +9,7 @@ import unittest
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from artifacts import ledger, paths, project, run, runner, schedules, skills
+from artifacts import inbox, ledger, paths, project, results, run, rundue, runner, schedules, skills
 
 from . import ROOT
 from .fixtures import RUN, make
@@ -285,6 +286,159 @@ class LedgerTests(Clean):
             run.end(directory, 'pr_opened')
         with self.assertRaisesRegex(ValueError, 'no readable run record'):
             run.end(self.tmp, 'done')
+
+
+class RunDueTests(Clean):
+    def setUp(self) -> None:
+        super().setUp()
+        self.settings(
+            '[project]\nadded = 2026-11-20\n'
+            "[workflows]\nenabled = ['dependency-report', 'dependency-assessment', 'code-review']\n"
+            "[schedule]\ndependency-report = 'monthly day 2'\ndependency-assessment = 'daily'\n"
+            "code-review = 'daily'\n"
+        )
+        self.now = datetime(2026, 11, 25, 12)
+
+    def test_catch_up(self) -> None:
+        todo, notes = rundue.plan([REPO], now=self.now)
+        planned = {(t.workflow, t.period): t.superseded for t in todo}
+        # A check runs only its latest open period, superseding the rest; a report runs each.
+        self.assertEqual(
+            planned[('dependency-assessment', '2026-11-25')],
+            ['2026-11-20', '2026-11-21', '2026-11-22', '2026-11-23', '2026-11-24'],
+        )
+        self.assertNotIn(('dependency-report', '2026-10'), planned)  # due 2 Nov, before added
+        self.assertIn('acts on one PR', ' '.join(notes))  # code-review needs --pr
+
+    def test_superseded_periods_are_skipped_when_the_latest_succeeds(self) -> None:
+        todo, _ = rundue.plan([REPO], now=self.now)
+        lines = rundue.run_all(todo, lambda item: 0)
+        self.assertIn('o/app dependency-assessment 2026-11-25: done', lines)
+        reasons = {s['period']: s['reason'] for s in ledger.read_skips(REPO)}
+        self.assertEqual(reasons['2026-11-22'], 'superseded by the run for 2026-11-25')
+        self.assertTrue(rundue.run_all(todo[:1], lambda item: 3)[0].endswith(': failed (status 3)'))
+
+    def test_retries_then_leaves_it_for_a_person(self) -> None:
+        self.settings(
+            "[project]\nadded = 2026-11-25\n[workflows]\nenabled = ['dependency-report']\n"
+            "[schedule]\ndependency-report = 'daily'\n"
+        )
+        for i in range(rundue.RETRIES + 1):
+            self.record('2026-11-24', 'failed', f'2026112{5}-0{i}0000')
+        todo, notes = rundue.plan([REPO], now=self.now)
+        self.assertEqual(todo, [])
+        self.assertIn('failed 3 times; left for a person', notes[0])
+
+    def test_a_run_in_progress_is_left_alone(self) -> None:
+        (paths.project_state(REPO) / 'dependency-assessment.lock').mkdir(parents=True)
+        todo, notes = rundue.plan([REPO], now=self.now)
+        self.assertNotIn('dependency-assessment', [t.workflow for t in todo])
+        self.assertIn('o/app dependency-assessment: a run is in progress', notes)
+        self.assertIn('not run: o/app dependency-assessment', rundue.describe(todo, notes))
+
+    def test_the_command(self) -> None:
+        result = subprocess.run(
+            [sys.executable, '-I', str(ROOT / 'bin' / 'artifact'), 'run-due', '--dry-run'],
+            capture_output=True, text=True, check=False,
+        )  # fmt: skip
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('o/app dependency-assessment', result.stdout)
+
+
+class ConsolidationTests(Clean):
+    def setUp(self) -> None:
+        super().setUp()
+        self.team = self.tmp / 'team'
+        weekly = self.team / 'weekly-report' / 'SKILL.md'
+        weekly.parent.mkdir(parents=True)
+        weekly.write_text(
+            "---\nname: weekly-report\nmetadata:\n  mason-requires: '>=0.4'\n"
+            "  mason-task: 'Write the weekly report'\n  mason-schedule: 'weekly mon'\n"
+            "  mason-kind: 'report'\n---\n"
+        )
+        monthly = self.team / 'monthly-report' / 'SKILL.md'
+        monthly.parent.mkdir(parents=True)
+        monthly.write_text(
+            "---\nname: monthly-report\nmetadata:\n  mason-requires: '>=0.4'\n"
+            "  mason-task: 'Write the monthly report'\n  mason-schedule: 'monthly day 3'\n"
+            "  mason-kind: 'report'\n  mason-consumes: 'weekly-report'\n---\n"
+        )
+        self.settings(
+            f"[project]\nadded = 2026-10-01\n[skills]\nweekly-report = '{weekly.parent}'\n"
+            f"monthly-report = '{monthly.parent}'\n"
+        )
+        self.spec = skills.resolve('monthly-report', project.skill_paths(REPO)).workflow
+
+    def weekly_done(self, key: str) -> None:
+        directory = paths.runs(REPO) / f'20261201-000000-weekly-report-{key.lower()}'
+        directory.mkdir(parents=True)
+        record = make(
+            RUN, id='20261201-000000-weekly-report', project=REPO, period=key, outcome='done'
+        )
+        record['produced_by'] = {**record['produced_by'], 'skill': 'weekly-report'}
+        (directory.parent / f'20261201-00000{key[-1]}-weekly-report').mkdir()
+        (directory.parent / f'20261201-00000{key[-1]}-weekly-report' / 'run.json').write_text(
+            json.dumps(record)
+        )
+
+    def test_blocked_until_its_weeks_are_settled(self) -> None:
+        now = datetime(2026, 12, 3, 12)
+        _, found, _ = ledger.history(REPO, 'monthly-report', self.spec, now, count=1)
+        self.assertEqual(found[0].state, 'blocked')
+        self.assertIn(
+            'waiting for weekly-report 2026-W45, 2026-W46, 2026-W47, 2026-W48', found[0].detail
+        )
+        for key in ('2026-W45', '2026-W46', '2026-W47'):
+            self.weekly_done(key)
+        ledger.skip(REPO, 'weekly-report', '2026-W48', 'a holiday week')
+        _, found, _ = ledger.history(REPO, 'monthly-report', self.spec, now, count=1)
+        self.assertEqual(found[0].state, 'due')
+        # Earlier months still wait for their weeks, and the inbox says so.
+        items = inbox.schedule_items(REPO, dict(os.environ))
+        self.assertTrue(
+            [i for i in items if i.kind == 'blocked' and 'monthly-report 2026-10' in i.text]
+        )
+
+    def test_results_within_a_period(self) -> None:
+        for key in ('2026-W44', '2026-W45', '2026-W49', 'notes'):
+            meta = paths.results(REPO) / 'weekly-report' / key / 'meta.json'
+            meta.parent.mkdir(parents=True)
+            meta.write_text(json.dumps({'title': key, 'body': 'b.md', 'saved_at': 'x'}))
+        found = results.listing(REPO, 'weekly-report', within='2026-11')
+        self.assertEqual([r.key for r in found], ['2026-W45'])
+        with self.assertRaises(schedules.ScheduleError):
+            results.listing(REPO, within='November')
+
+
+class HeartbeatTests(unittest.TestCase):
+    def test_units_and_cron(self) -> None:
+        units = rundue.systemd_units('/bin/mason', 10, '/home/me/.config/mason/env')
+        self.assertIn(
+            "ExecStart=/bin/mason run-due --trigger 'systemd timer mason-run-due.timer'",
+            units['mason-run-due.service'],
+        )
+        self.assertIn('EnvironmentFile=-/home/me/.config/mason/env', units['mason-run-due.service'])
+        self.assertIn('OnUnitActiveSec=10min', units['mason-run-due.timer'])
+        self.assertEqual(
+            rundue.cron_line('/bin/mason', 15, '/l'),
+            '*/15 * * * * /bin/mason run-due --trigger cron >> /l 2>&1',
+        )
+
+    def test_the_command_writes_only_with_systemd(self) -> None:
+        def mason(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, '-I', str(ROOT / 'bin' / 'artifact'), 'schedule', 'install', *args],
+                capture_output=True, text=True, check=False,
+            )  # fmt: skip
+
+        self.assertIn('crontab', mason().stdout)
+        self.assertIn('run-due --trigger cron', mason('--cron').stdout)
+        result = mason('--systemd', '--every', '5')
+        self.assertIn('systemctl --user', result.stdout)
+        unit = paths.config_home().parent / 'systemd' / 'user' / 'mason-run-due.timer'
+        self.assertIn('OnUnitActiveSec=5min', unit.read_text())
+        shutil.rmtree(paths.config_home().parent / 'systemd')
+        self.assertIn('between 1 and 60', mason('--every', '0').stderr)
 
 
 class CliTests(Clean):

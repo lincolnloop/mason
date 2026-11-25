@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import discussions, paths, validate
+from . import discussions, paths, schedules, validate
 
 KEY = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
 META, PUBLISHED, RUN, PREVIOUS = 'meta.json', 'published.json', 'run.json', 'previous'
@@ -156,13 +156,31 @@ def load(repo: str, workflow: str, key: str, env: Mapping[str, str] | None = Non
 
 
 def listing(
-    repo: str, workflow: str | None = None, env: Mapping[str, str] | None = None
+    repo: str,
+    workflow: str | None = None,
+    env: Mapping[str, str] | None = None,
+    within: str | None = None,
 ) -> list[Result]:
+    """A project's results; with `within`, only those keyed by a period inside it (the weeks
+    of a month, by the rule in `schedules.within`), for a workflow that consolidates them."""
+    if within is not None:
+        schedules.from_key(within)
     root = paths.results(repo, env)
     found = []
     for meta in sorted(root.glob(f'{workflow or "*"}/*/{META}')):
-        found.append(load(repo, meta.parent.parent.name, meta.parent.name, env))
+        key = meta.parent.name
+        if within is not None and not _inside(key, within):
+            continue
+        found.append(load(repo, meta.parent.parent.name, key, env))
     return found
+
+
+def _inside(key: str, outer: str) -> bool:
+    try:
+        period = schedules.from_key(key)
+    except schedules.ScheduleError:
+        return False
+    return key in schedules.within(outer, period.interval)
 
 
 def render(found: Sequence[Result]) -> str:

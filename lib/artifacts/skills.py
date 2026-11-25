@@ -149,6 +149,9 @@ class Workflow:
     kind: str = 'check'
     catch_up: str = 'latest'
     grace: str = '1d'
+    # The workflow whose results it consolidates (weekly reports into a monthly one): each of
+    # its periods is blocked until that workflow's periods inside it are done or skipped.
+    consumes: str | None = None
 
 
 def directories(env: Mapping[str, str] | None = None) -> list[Path]:
@@ -334,6 +337,7 @@ def _workflow(metadata: Mapping[str, str]) -> Workflow | None:
         kind=kind,
         catch_up=catch_up,
         grace=grace,
+        consumes=metadata.get('mason-consumes') or None,
     )
 
 

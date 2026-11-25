@@ -12,6 +12,11 @@ its skills from the same tag: each skill states the mason versions it works with
 - Every run records the period it was for, and how it ended (`mason run-end`, which every
   workflow skill now calls). The skills need this mason: reinstall them.
 - `mason project add` records the date a project was added; its schedules count from then.
+- `mason run-due` runs every period that is due, with each skill's catch-up rule and two retries;
+  `mason schedule install` sets up a systemd timer or a cron line to start it.
+- Consolidation: a skill can consume another workflow's results (`mason-consumes`); its periods
+  are blocked until their inputs are settled. `mason results --within <period>` lists them.
+- `mason inbox` lists overdue periods and blocked consolidations.
 
 ## 0.3.0
 

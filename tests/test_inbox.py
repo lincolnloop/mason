@@ -192,7 +192,9 @@ class LocalTests(Clean):
 
 class CollectTests(Clean):
     def test_most_urgent_first_and_archived_skipped(self) -> None:
-        settings(REPO, '[workflows]\nenabled = ["sentry-errors"]\n')
+        settings(
+            REPO, '[workflows]\nenabled = ["sentry-errors"]\n[schedule]\nsentry-errors = "off"\n'
+        )
         settings('o/old', "[project]\narchived = '2026-11-01'\n")
         gh = FakeGh(prs=[pr(2), pr(3, mergeable='CONFLICTING')], issues=[issue(4)])
         items = inbox.collect(run_gh=gh, env=dict(os.environ, SENTRY_AUTH_TOKEN=''), now=NOW)

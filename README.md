@@ -257,6 +257,20 @@ mason skip <owner>/<repo> dependency-report 2026-10 --reason 'project paused'
 mason schedule set <owner>/<repo> dependency-report 'weekly mon 07:00'
 ```
 
+To run on a schedule, start `mason run-due` regularly: it runs every period that is due,
+unattended, one at a time. A check (the assessment) runs only its latest missed period; a report
+runs each one. A failed period is retried twice, then left for you in `mason inbox`.
+
+```sh
+mason schedule install            # shows a systemd timer and a crontab line
+mason schedule install --systemd  # writes the timer; then systemctl --user enable --now mason-run-due.timer
+mason run-due --dry-run           # what would run now
+```
+
+A workflow can consolidate another's results (`mason-consumes: 'weekly-report'` in its skill):
+each of its periods is blocked until the other's periods inside it are done or skipped, and
+`mason results --within 2026-11` lists them.
+
 A report covers a period that has ended (October's is due on 2 November); a check runs once in
 each period. Periods count from when a project was added, or a schedule was changed, so changing
 monthly to weekly doesn't make earlier weeks overdue.
