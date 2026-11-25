@@ -122,6 +122,16 @@ def worktree_copy(project: Path) -> list[str]:
     return []
 
 
+# Where a project keeps its own coding conventions, for people and agents alike.
+CONVENTIONS_PATHS = ('docs/conventions.md', 'CONVENTIONS.md', 'docs/CONVENTIONS.md')
+
+
+def conventions(files: list[str]) -> list[str]:
+    """The project's conventions document, if it has one at a usual path."""
+    tracked = set(files)
+    return [path for path in CONVENTIONS_PATHS if path in tracked]
+
+
 def ci_config(files: list[str]) -> str | None:
     """The CI configuration that runs on pull requests, if the repository has one."""
     for path in files:

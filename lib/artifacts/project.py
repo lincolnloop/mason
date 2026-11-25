@@ -57,6 +57,15 @@ SECTIONS: dict[str, dict[str, tuple[str, bool]]] = {
         'npm_build': ('str', False),
         'verify': ('list', False),
     },
+    'code-review': {
+        # The project's own knowledge skills to load, e.g. framework rules.
+        'knowledge': ('list', True),
+        # The project's own conventions: documents in the repository, read as its rules.
+        'conventions': ('list', True),
+        # Which findings are posted as inline comments: none, suggestions, or all.
+        'inline': ('str', True),
+    },
+    'code-review-retrospective': {'period_days': ('int', True)},
     'dependency-report': {
         # The Discussions category the monthly report is published in.
         'category': ('str', True),
@@ -90,6 +99,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         'ci': False,
     },
     'dependency-upgrades': {'pip_requirements': [], 'pip_sources': [], 'npm_projects': []},
+    # One consolidated review comment; inline comments only when a project asks for them.
+    'code-review': {'knowledge': [], 'conventions': [], 'inline': 'none'},
+    'code-review-retrospective': {'period_days': 30},
     'dependency-report': {
         'category': 'Dependency reports',
         'production': [],
@@ -207,6 +219,8 @@ def detected(project: Path) -> dict[str, dict[str, tuple[Any, str]]]:
         found['verify']['worktree_copy'] = (copy, 'an untracked .env that git ignores')
     if ci := detect.ci_config(files):
         found['verify']['ci'] = (True, f'{ci} runs on pull requests')
+    if conventions := detect.conventions(files):
+        found['code-review'] = {'conventions': (conventions, 'a tracked conventions document')}
     how = {
         'pip_requirements': 'tracked .txt files with a pip-compile header',
         'pip_sources': 'the .in file beside each compiled file',
@@ -299,6 +313,14 @@ def check(config: dict[str, Any], required_sections: tuple[str, ...] = ()) -> li
     repo = config.get('repo')
     if isinstance(repo, dict) and isinstance(repo.get('name'), str):
         checker.string(repo['name'], '$.repo.name', pattern=REPO_PATTERN, pattern_hint='owner/repo')
+    review = config.get('code-review')
+    if isinstance(review, dict) and review.get('inline') not in (
+        None,
+        'none',
+        'suggestions',
+        'all',
+    ):
+        checker.error('$.code-review.inline', 'must be none, suggestions or all')
     upgrades = config.get('dependency-upgrades')
     if 'dependency-upgrades' in required_sections and isinstance(upgrades, dict):
         if not upgrades.get('pip_requirements') and not upgrades.get('npm_projects'):

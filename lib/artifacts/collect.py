@@ -60,6 +60,39 @@ def upgrade_prs(repo: str, workflow: str = 'dependency-upgrades') -> list[dict[s
     return [pr for pr in json.loads(text) if pr['headRefName'].startswith(prefix)]
 
 
+def open_findings(repo: str) -> dict[str, str]:
+    """fingerprint -> URL, for every finding embedded in an open automation PR or issue.
+
+    A workflow skips what is already in front of someone, so it doesn't report it twice.
+    """
+    found: dict[str, str] = {}
+    for kind in ('pr', 'issue'):
+        items = json.loads(
+            gh(
+                kind,
+                'list',
+                '--repo',
+                repo,
+                '--label',
+                'automation',
+                '--state',
+                'open',
+                '--limit',
+                '500',
+                '--json',
+                'url,body',
+            )
+        )
+        for item in items:
+            try:
+                findings = embed.extract(item.get('body') or '', 'finding/1')
+            except ValueError:
+                continue
+            for finding in findings:
+                found.setdefault(finding['fingerprint'], item['url'])
+    return dict(sorted(found.items()))
+
+
 def all_alerts(repo: str) -> list[dict[str, Any]]:
     text = gh(
         'api', f'repos/{repo}/dependabot/alerts?state={ALERT_STATES}&per_page=100', '--paginate'

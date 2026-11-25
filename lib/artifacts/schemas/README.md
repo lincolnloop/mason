@@ -10,6 +10,8 @@ that drifts from the code fails the tests.
 | [`finding/1`](finding.md) | every workflow: one per package, error group or observation | the renderer; the person deciding the PR |
 | [`assessment/1`](assessment.md) | `dependency-assessment`, in the month's assessment issue | `dependency-upgrades`; the report's notes on what is still open |
 | [`change/1`](change.md) | `dependency-upgrades`, one per PR | the renderer; the person deciding the PR |
+| [`review/1`](review.md) | `code-review`, one per review | the renderer; the next follow-up review; `collect-review-outcomes` |
+| [`review-outcomes/1`](review-outcomes.md) | `artifact collect-review-outcomes` | the `code-review-retrospective` skill; the report |
 | [`outcomes/2`](outcomes.md) | `artifact collect-outcomes`, for a retrospective | the `dependency-retrospective` skill; the report |
 | [`dependency-report/1`](dependency-report.md) | `artifact collect-report`, for one month | the `dependency-report` skill; the published report |
 | [`run/1`](run.md) | every run, at its start | the renderer; anyone asking who started a PR, or why a run opened none |
@@ -30,6 +32,7 @@ Every artifact has:
 
 ```sh
 mason validate finding.json
+mason validate review.json --diff pr.diff
 ```
 
 A validator reports every error, each naming the field (`$.dependency.fixed`) and what to

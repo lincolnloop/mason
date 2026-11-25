@@ -280,6 +280,14 @@ class ResolveTests(unittest.TestCase):
         self.git('remote', 'set-url', 'origin', 'git@github.com:owner/other.git')
         self.assertFalse(project.resolve(self.repo).file_exists)
 
+    def test_conventions_document_is_detected(self) -> None:
+        self.assertEqual(project.resolve(self.repo).config['code-review']['conventions'], [])
+        self.write('docs/conventions.md', '# Conventions\n')
+        self.git('add', 'docs/conventions.md')
+        resolved = project.resolve(self.repo)
+        self.assertEqual(resolved.config['code-review']['conventions'], ['docs/conventions.md'])
+        self.assertTrue(resolved.sources[('code-review', 'conventions')].startswith('detected: '))
+
     def test_cli(self) -> None:
         command = [sys.executable, '-I', str(SCRIPT), 'config', str(self.repo)]
         result = subprocess.run(

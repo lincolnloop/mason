@@ -16,7 +16,7 @@ class EmbedTests(unittest.TestCase):
         self.assertEqual(embed.extract(embed.embed(change)), [change])
 
     def test_hyphenated_schema_names(self) -> None:
-        artifact = {'schema': 'assessment/1', 'rows': []}
+        artifact = {'schema': 'review-outcomes/1', 'reviews': []}
         self.assertEqual(embed.extract(embed.embed(artifact)), [artifact])
 
     def test_github_line_endings(self) -> None:

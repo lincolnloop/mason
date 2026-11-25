@@ -23,9 +23,10 @@ SCHEMA = 'run/1'
 
 TRIGGERS = ('interactive', 'unattended')
 # pr_opened: this run's PR carries the record. issue_opened: this run's report issue does.
+# review_posted: this run's review of a PR does.
 # stopped_pr_open: an earlier upgrade PR is still open, so this run changed nothing, and the
 # record is a comment on that PR.
-OUTCOMES = ('pr_opened', 'issue_opened', 'stopped_pr_open')
+OUTCOMES = ('pr_opened', 'issue_opened', 'review_posted', 'stopped_pr_open')
 ID_PATTERN = re.compile(r'^\d{8}-\d{6}-[a-z0-9][a-z0-9-]*$')
 
 FIELDS = ('id', 'trigger', 'started_by', 'host', 'started_at')

@@ -32,7 +32,8 @@ Style: single quotes, 100-character lines, explicit type hints, ruff for lint an
 
 - Tests (stdlib `unittest`): `uv run --locked python -m unittest discover -s tests -t .`
 - Lint and format: `ruff check . && ruff format --check .`
-- Validate an artifact: `uv run mason validate <file.json>`
+- Validate an artifact: `uv run mason validate <file.json>` (a review also takes
+  `--diff <pr.diff>`)
 - A project's resolved configuration:
   `uv run mason config <project> [--toml]`
 - Check the prerequisites (tools, `gh` login, a workflow's tokens):
@@ -42,7 +43,8 @@ Style: single quotes, 100-character lines, explicit type hints, ruff for lint an
 - Everything else: `uv run mason --help`
 - After changing dependencies in `pyproject.toml`: `uv lock`, and commit `uv.lock` with it.
 
-The JSON examples in `schemas/*.md` are run as tests (`tests/test_schema_docs.py`). When a schema changes, update its page in the same
+The JSON examples in `schemas/*.md` are run as tests (`tests/test_schema_docs.py`), review
+examples against the page's `diff` block. When a schema changes, update its page in the same
 commit.
 
 Commit messages explain why. The diff shows what.

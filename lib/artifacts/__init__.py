@@ -2,13 +2,15 @@
 
 - `finding`: one thing a workflow found.
 - `change`: the pull request it opens.
+- `review`: a review of a pull request.
 - `run`: who started a run, where, and how it ended.
-- `outcomes`: what happened afterwards, for a retrospective.
+- `outcomes`, `review-outcomes`: what happened afterwards, for a retrospective.
 - `assessment`: every open alert, and what was decided about it.
 - `dependency-report`: a month's vulnerability figures, for the people the project answers to.
 
 Each module has `SCHEMA` (the value of the artifact's `schema` field) and `validate(artifact)`,
-which returns a list of errors, empty when the artifact is valid.
+which returns a list of errors, empty when the artifact is valid. A review is validated against
+the PR's unified diff as well, to check its locations.
 """
 
 from typing import Any
@@ -19,6 +21,8 @@ from . import (
     finding,
     outcomes,
     report,
+    review,
+    review_outcomes,
     run,
 )
 
@@ -27,16 +31,23 @@ VALIDATORS = {
     change.SCHEMA: change.validate,
     run.SCHEMA: run.validate,
     outcomes.SCHEMA: outcomes.validate,
+    review_outcomes.SCHEMA: review_outcomes.validate,
     report.SCHEMA: report.validate,
     assessment.SCHEMA: assessment.validate,
 }
 
 
-def validate(artifact: Any) -> list[str]:
+def validate(artifact: Any, diff_text: str | None = None) -> list[str]:
     """Validate any artifact, choosing the validator from its `schema` field."""
     schema = artifact.get('schema') if isinstance(artifact, dict) else None
+    if schema == review.SCHEMA:
+        if diff_text is None:
+            return ['$: a review must be validated against the PR diff (pass --diff)']
+        return review.validate(artifact, diff_text)
     validator = VALIDATORS.get(schema)
     if validator is None:
-        known = ', '.join(sorted(VALIDATORS))
+        known = ', '.join(sorted([*VALIDATORS, review.SCHEMA]))
         return [f'$.schema: must be one of {known}, got {schema!r}']
+    if diff_text is not None:
+        return ['$: --diff only applies to a review']
     return validator(artifact)

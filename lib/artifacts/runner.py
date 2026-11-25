@@ -104,6 +104,16 @@ WORKFLOWS = {
         task='Run the dependency report for this project',
         tools=(),
     ),
+    # A review reads someone else's code and never runs it: no build, test or package tools.
+    'code-review': Workflow(
+        task='Run the code review for pull request #{pr} in this project',
+        tools=(),
+        needs_pr=True,
+    ),
+    'code-review-retrospective': Workflow(
+        task='Run the code review retrospective for this project',
+        tools=MASON_CHECKS,
+    ),
 }
 
 

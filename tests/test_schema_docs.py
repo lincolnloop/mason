@@ -1,4 +1,7 @@
-"""Every JSON example in schemas/*.md must validate, so the docs can't drift from the code."""
+"""Every JSON example in schemas/*.md must validate, so the docs can't drift from the code.
+
+On a page with a ```diff block, review examples are validated against that diff.
+"""
 
 import json
 import re
@@ -20,19 +23,21 @@ class SchemaDocTests(unittest.TestCase):
         examples = 0
         for page in pages:
             blocks = BLOCK.findall(page.read_text(encoding='utf-8'))
+            diffs = [body for kind, body in blocks if kind == 'diff']
             for kind, body in blocks:
                 if kind != 'json':
                     continue
                 examples += 1
                 with self.subTest(page=page.name, example=body[:60]):
                     artifact = json.loads(body)
-                    self.assertEqual(validate(artifact), [])
-        self.assertGreaterEqual(examples, 8)
+                    diff_text = diffs[0] if diffs and artifact.get('schema') == 'review/1' else None
+                    self.assertEqual(validate(artifact, diff_text), [])
+        self.assertGreaterEqual(examples, 10)
 
     def test_every_schema_has_a_page(self) -> None:
-        from artifacts import VALIDATORS
+        from artifacts import VALIDATORS, review
 
-        for schema in VALIDATORS:
+        for schema in [*VALIDATORS, review.SCHEMA]:
             name = schema.split('/')[0]
             self.assertTrue((ROOT / 'schemas' / f'{name}.md').exists(), name)
 

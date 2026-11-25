@@ -37,6 +37,11 @@ class PromptTests(unittest.TestCase):
             'Run the dependency report for this project (for October 2026), unattended.',
         )
 
+    def test_code_review_needs_a_pr(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'give --pr'):
+            runner.prompt('code-review')
+        self.assertIn('pull request #7', runner.prompt('code-review', pr=7))
+
 
 class HeadlessCommandTests(unittest.TestCase):
     def test_command(self) -> None:
@@ -70,6 +75,11 @@ class HeadlessCommandTests(unittest.TestCase):
         command = runner.command(Path('/work/app'), STATE, 'dependency-upgrades')
         self.assertIn('Bash(mason *)', command)
         self.assertFalse([tool for tool in command if tool.startswith('Bash(python')])
+
+    def test_code_review_runs_nothing_from_the_pr(self) -> None:
+        command = runner.command(Path('/work/app'), STATE, 'code-review', pr=7)
+        for tool in ('Bash(make *)', 'Bash(npm *)', 'Bash(uv run --locked python -m unittest *)'):
+            self.assertNotIn(tool, command)
 
     def test_doctor_command_checks_the_workflow(self) -> None:
         self.assertEqual(
@@ -225,6 +235,8 @@ class RunCommandTests(unittest.TestCase):
             result = mason('run', 'dependency-report', '--project', empty, '--dry-run')
             self.assertEqual(result.returncode, 1)
             self.assertIn('is not the root of a git repository', result.stderr)
+        result = mason('run', 'code-review', '--project', str(self.project), '--dry-run')
+        self.assertIn('give --pr', result.stderr)
         result = mason('run', 'dependency-report', '--repo', 'not-a-repo', '--dry-run')
         self.assertIn('owner/name', result.stderr)
         subprocess.run(['git', '-C', str(self.project), 'remote', 'remove', 'origin'], check=True)

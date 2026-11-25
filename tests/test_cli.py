@@ -10,7 +10,7 @@ from pathlib import Path
 from artifacts.embed import embed as embed_text
 
 from . import ROOT
-from .fixtures import CHANGE, FINDING, RUN, make
+from .fixtures import CHANGE, DIFF, FINDING, REVIEW, REVIEW_RUN, RUN, make
 
 SCRIPT = ROOT / 'bin' / 'artifact'
 
@@ -154,6 +154,52 @@ class CliTests(unittest.TestCase):
         self.assertIn('| Medium | #12 | `django` |', result.stdout)
         # pillow's alert 7 is cited by the PR's finding, so it is covered.
         self.assertNotIn('#7', result.stdout.split('<!--')[0])
+
+    def test_review_requires_a_diff(self) -> None:
+        review_file = self.write('r.json', REVIEW)
+        result = run('validate', str(review_file), cwd=self.tmp)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('must be validated against the PR diff', result.stderr)
+        result = run(
+            'validate', str(review_file), '--diff', str(self.write('pr.diff', DIFF)), cwd=self.tmp
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_annotate_diff(self) -> None:
+        out = self.tmp / 'annotated.txt'
+        result = run(
+            'annotate-diff', str(self.write('pr.diff', DIFF)), '-o', str(out), cwd=self.tmp
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('[NEW:12]     new = get_or_404(slug)', out.read_text(encoding='utf-8'))
+
+    def test_render_review_comment_and_payload(self) -> None:
+        args = [
+            'render-review',
+            str(self.write('r.json', REVIEW)),
+            '--diff',
+            str(self.write('pr.diff', DIFF)),
+            '--run',
+            str(self.write('run.json', REVIEW_RUN)),
+        ]
+        result = run(*args, cwd=self.tmp)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('**Changes requested** (1 important)', result.stdout)
+        payload = json.loads(run(*args, '--payload', '--inline', 'all', cwd=self.tmp).stdout)
+        self.assertEqual((payload['event'], len(payload['comments'])), ('COMMENT', 1))
+
+    def test_render_review_refuses_another_runs_review(self) -> None:
+        result = run(
+            'render-review',
+            str(self.write('r.json', REVIEW)),
+            '--diff',
+            str(self.write('pr.diff', DIFF)),
+            '--run',
+            str(self.write('run.json', make(REVIEW_RUN, id='20261112-080000-code-review'))),
+            cwd=self.tmp,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('review.run is', result.stderr)
 
 
 if __name__ == '__main__':
