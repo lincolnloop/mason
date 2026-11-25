@@ -881,8 +881,8 @@ def _run_start(args: argparse.Namespace) -> str:
     except project.ConfigError as exc:
         raise Refused(str(exc)) from exc
     try:
-        skill = skills.check(args.workflow)
-    except skills.SkillError as exc:
+        skill = skills.check_resolved(args.workflow, project.skill_paths(repo))
+    except (skills.SkillError, project.ConfigError) as exc:
         raise Refused(str(exc)) from exc
     versions = {'mason_version': version.package_version()}
     if skill is not None and skill.version:
@@ -1056,10 +1056,6 @@ def _version(args: argparse.Namespace) -> str:
 
 
 def _run(args: argparse.Namespace) -> str:
-    try:
-        runner.prompt(args.workflow, args.pr, args.request)
-    except ValueError as exc:
-        raise Refused(str(exc)) from exc
     if args.repo:
         repo = args.repo
         try:
@@ -1086,6 +1082,7 @@ def _run(args: argparse.Namespace) -> str:
     try:
         enabled = project.enabled_workflows(repo)
         archived_on = project.archived(repo)
+        mapping = project.skill_paths(repo)
     except project.ConfigError as exc:
         raise Refused(str(exc)) from exc
     if archived_on:
@@ -1094,25 +1091,45 @@ def _run(args: argparse.Namespace) -> str:
             'it again'
         )
     try:
-        skills.check(args.workflow)
+        skill = skills.check_resolved(args.workflow, mapping)
     except skills.SkillError as exc:
         raise Refused(f'{exc}\n{args.workflow} not started') from exc
+    if skill is None or skill.workflow is None:
+        try:
+            runner.declared(args.workflow)  # says what is installed
+        except ValueError as exc:
+            raise Refused(str(exc)) from exc
+    spec = skill.workflow
+    try:
+        runner.prompt(args.workflow, args.pr, args.request, spec=spec)
+    except ValueError as exc:
+        raise Refused(str(exc)) from exc
     if args.workflow not in enabled:
         raise Refused(
             f'{args.workflow} is not enabled for {repo}: add it to `enabled` under [workflows] '
             f'in {paths.settings(repo)}'
         )
-    state, skills_dir = paths.project_state(repo), paths.skills_home()
+    state = paths.project_state(repo)
+    # The session's own skills directory: this workflow's skill and the skills it names, linked
+    # from where the settings or the install put them, so it sees no others of mason's.
+    session = state / 'sessions' / runner.log_path(Path(), args.workflow).stem
+    skill_file = session / '.claude' / 'skills' / args.workflow / 'SKILL.md'
+    if not args.dry_run:
+        try:
+            skills.stage(args.workflow, session, mapping)
+        except skills.SkillError as exc:
+            raise Refused(f'{exc}\n{args.workflow} not started') from exc
     if args.unattended:
         command = runner.command(
-            directory, state, args.workflow, tuple(args.allow), args.claude, args.pr, skills_dir,
-            args.request,
+            directory, state, args.workflow, tuple(args.allow), args.claude, args.pr, session,
+            args.request, spec, skill_file,
         )  # fmt: skip
         env = runner.environment(args.trigger)
     else:
         command = runner.interactive_command(
-            directory, state, args.workflow, skills_dir, args.claude, args.pr, args.request
-        )
+            directory, state, args.workflow, session, args.claude, args.pr, args.request, spec,
+            skill_file,
+        )  # fmt: skip
         env = dict(os.environ)
     if args.dry_run:
         marks = (

@@ -93,6 +93,10 @@ Then:
    `mason config path/to/<project>` shows every resolved value and where it came from, and
    `mason.toml.example` has every key.
 
+   To run a workflow on this project with a skill other than the installed one (your team's
+   own code review, say), map it in the same file: `[skills]` then
+   `code-review = '~/Work/team-skills/code-review'`.
+
    Then, for the projects you've added:
    ```sh
    mason project list                          # each project, its workflows, when each last ran

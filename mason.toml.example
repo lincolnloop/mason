@@ -20,6 +20,11 @@ version = 1
 # every workflow. `mason project add` writes it.
 enabled = ['dependency-assessment', 'dependency-upgrades', 'code-review']
 
+[skills]
+# A workflow run with a skill other than the installed one: the directory holding its SKILL.md.
+# The skill's `name` must be the workflow's, and it must state a mason-requires this mason meets.
+code-review = '~/Work/example-org-skills/code-review'
+
 [project]
 # Written by `mason project archive`, and removed by `--undo`: an archived project runs nothing.
 archived = '2026-11-25'

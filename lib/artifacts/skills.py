@@ -258,3 +258,77 @@ def check(workflow: str, env: Mapping[str, str] | None = None) -> Skill | None:
     if skill is not None and (problem := skill.problem(version.package_version())):
         raise SkillError(f'{skill.path}: {problem}')
     return skill
+
+
+# --- A project's skills, and a run's ------------------------------------------------------------
+
+# How one skill names another, installed beside it (AGENTS.md: "another skill as
+# ../<name>/SKILL.md").
+SIBLING = re.compile(r'\.\./([a-z0-9][a-z0-9-]*)/SKILL\.md')
+
+
+def resolve(
+    name: str, mapping: Mapping[str, str] | None = None, env: Mapping[str, str] | None = None
+) -> Skill | None:
+    """The skill a project runs for `name`: the one its settings map it to (`[skills]`), or else
+    the installed one. None if there is neither."""
+    if mapping and name in mapping:
+        path = Path(mapping[name]).expanduser()
+        path = path if path.name == 'SKILL.md' else path / 'SKILL.md'
+        if not path.is_file():
+            raise SkillError(f'[skills] {name}: no SKILL.md at {path}')
+        skill = read(path)
+        if skill.name != name:
+            raise SkillError(f'[skills] {name}: {path} is the {skill.name} skill')
+        if skill.workflow is None and name in workflows(env):
+            raise SkillError(f'[skills] {name}: {path} declares no mason-task, so is no workflow')
+        return skill
+    return find(name, env) or _any(name, env)
+
+
+def _any(name: str, env: Mapping[str, str] | None) -> Skill | None:
+    """A skill that isn't a workflow (one a workflow names), from the same directories."""
+    for directory in directories(env):
+        path = directory / name / 'SKILL.md'
+        if path.is_file():
+            return read(path)
+    return None
+
+
+def check_resolved(
+    name: str, mapping: Mapping[str, str] | None = None, env: Mapping[str, str] | None = None
+) -> Skill | None:
+    """As `check`, for the skill the project runs."""
+    skill = resolve(name, mapping, env)
+    if skill is not None and (problem := skill.problem(version.package_version())):
+        raise SkillError(f'{skill.path}: {problem}')
+    return skill
+
+
+def stage(
+    name: str,
+    directory: Path,
+    mapping: Mapping[str, str] | None = None,
+    env: Mapping[str, str] | None = None,
+) -> Path:
+    """A skills directory for one run, holding the workflow's skill and every skill it names
+    (`../<name>/SKILL.md`), each linked from where the project's settings or the install put it.
+    So a session sees the skills this run uses, and no others of mason's. Returns the workflow's
+    SKILL.md inside it."""
+    skills_dir = directory / '.claude' / 'skills'
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    pending, seen = [name], set()
+    while pending:
+        current = pending.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        skill = resolve(current, mapping, env)
+        if skill is None:
+            raise SkillError(f'{current} is not installed, and {name} needs it')
+        link = skills_dir / current
+        if link.is_symlink() or link.exists():
+            link.unlink()
+        link.symlink_to(skill.path.parent.resolve(), target_is_directory=True)
+        pending += SIBLING.findall(skill.path.read_text(encoding='utf-8'))
+    return skills_dir / name / 'SKILL.md'

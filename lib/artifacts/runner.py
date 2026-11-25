@@ -82,21 +82,29 @@ def declared(name: str) -> skills.Workflow:
 
 
 def prompt(
-    workflow: str, pr: int | None = None, request: str = '', unattended: bool = False
+    workflow: str,
+    pr: int | None = None,
+    request: str = '',
+    unattended: bool = False,
+    spec: skills.Workflow | None = None,
+    skill_file: Path | None = None,
 ) -> str:
     """The request the session starts with: the workflow's task, then anything the person added
-    (a month, a period, a scope), marked unattended when nobody is watching."""
-    spec = declared(workflow)
+    (a month, a period, a scope), marked unattended when nobody is watching. With `skill_file`,
+    it names the skill to follow, rather than leaving the agent to choose one by description."""
+    spec = spec or declared(workflow)
     if spec.needs_pr and pr is None:
         raise ValueError(f'{workflow} acts on one pull request: give --pr')
     text = spec.task.format(pr=pr)
+    if skill_file is not None:
+        text = f'Read {skill_file} and follow it. {text}'
     if request.strip():
         text += f' ({request.strip()})'
     return text + (', unattended.' if unattended else '.')
 
 
 def _directories(state: Path, skills: Path | None) -> list[str]:
-    """`--add-dir` for the project's state directory, and mason's skills when they are kept there."""
+    """`--add-dir` for the project's state directory, and the run's skills directory."""
     added = ['--add-dir', str(state)]
     if skills is not None:
         added += ['--add-dir', str(skills)]
@@ -111,10 +119,13 @@ def interactive_command(
     claude: str = 'claude',
     pr: int | None = None,
     request: str = '',
+    spec: skills.Workflow | None = None,
+    skill_file: Path | None = None,
 ) -> list[str]:
     """Claude Code, started in the project with the request typed in. The person answers its
     questions and approves its actions, under their own permission settings."""
-    text = prompt(workflow, pr, request) + f' The project ($PROJECT) is {project.resolve()}.'
+    text = prompt(workflow, pr, request, spec=spec, skill_file=skill_file)
+    text += f' The project ($PROJECT) is {project.resolve()}.'
     return [claude, text, *_directories(state, skills)]
 
 
@@ -127,9 +138,11 @@ def command(
     pr: int | None = None,
     skills: Path | None = None,
     request: str = '',
+    spec: skills.Workflow | None = None,
+    skill_file: Path | None = None,
 ) -> list[str]:
     """Claude Code headless, for an unattended run."""
-    spec = declared(workflow)
+    spec = spec or declared(workflow)
     rules = RULES.format(project=project.resolve(), state=state)
     # The session writes only to the project's state directory, where its run files go. mason is
     # allowed as the installed command, never `python <any file>`: a project's (or a pull
@@ -137,7 +150,7 @@ def command(
     return [
         claude,
         '-p',
-        prompt(workflow, pr, request, unattended=True) + rules,
+        prompt(workflow, pr, request, True, spec, skill_file) + rules,
         *_directories(state, skills),
         '--permission-mode',
         'dontAsk',

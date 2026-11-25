@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from artifacts import doctor, paths, runner, skills, version
+from artifacts import doctor, paths, project, runner, skills, version
 
 from . import HOME, ROOT
 
@@ -224,6 +224,107 @@ class CliTests(WithoutTheCheckout):
         record = json.loads((Path(json.loads(result.stdout)['dir']) / 'run.json').read_text())
         self.assertEqual(record['produced_by']['skill_version'], '1.2.0')
         self.assertEqual(record['produced_by']['mason_version'], version.package_version())
+
+
+class ProjectSkillTests(WithoutTheCheckout):
+    """A project's settings can map a workflow to a skill elsewhere; a run stages its skills."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.installed = skills.directories()[0]
+
+    def tearDown(self) -> None:
+        super().tearDown()
+        self._tmp.cleanup()
+        shutil.rmtree(paths.data_home(), ignore_errors=True)
+        shutil.rmtree(paths.config_home(), ignore_errors=True)
+        shutil.rmtree(paths.state_home(), ignore_errors=True)
+
+    def test_mapped_over_installed(self) -> None:
+        install(self.installed, 'code-review')
+        mine = install(self.tmp / 'team', 'code-review').parent
+        self.assertEqual(skills.resolve('code-review').path.parent.parent, self.installed)
+        self.assertEqual(
+            skills.resolve('code-review', {'code-review': str(mine)}).path.parent, mine
+        )
+        mapping = {'code-review': str(mine / 'SKILL.md')}
+        self.assertEqual(skills.resolve('code-review', mapping).path.parent, mine)
+        self.assertIsNone(skills.resolve('sentry-errors'))
+
+    def test_bad_mappings(self) -> None:
+        install(self.installed, 'code-review')
+        other = install(self.tmp, 'dependency-report').parent
+        for mapping, message in (
+            ({'code-review': str(self.tmp / 'missing')}, 'no SKILL.md'),
+            ({'code-review': str(other)}, 'is the dependency-report skill'),
+        ):
+            with self.subTest(mapping=mapping), self.assertRaisesRegex(skills.SkillError, message):
+                skills.resolve('code-review', mapping)
+        plain = self.tmp / 'plain' / 'code-review' / 'SKILL.md'
+        plain.parent.mkdir(parents=True)
+        plain.write_text('---\nname: code-review\n---\n')
+        with self.assertRaisesRegex(skills.SkillError, 'declares no mason-task'):
+            skills.resolve('code-review', {'code-review': str(plain.parent)})
+
+    def test_stage_links_the_skill_and_those_it_names(self) -> None:
+        upgrades = install(self.installed, 'dependency-upgrades')
+        upgrades.write_text(upgrades.read_text() + '\nRead ../dependency-assessment/SKILL.md.\n')
+        mine = install(self.tmp / 'team', 'dependency-assessment').parent
+        install(self.installed, 'code-review')
+        session = self.tmp / 'session'
+        skill_file = skills.stage(
+            'dependency-upgrades', session, {'dependency-assessment': str(mine)}
+        )
+        staged = session / '.claude' / 'skills'
+        self.assertEqual(skill_file, staged / 'dependency-upgrades' / 'SKILL.md')
+        self.assertEqual(
+            sorted(p.name for p in staged.iterdir()),
+            ['dependency-assessment', 'dependency-upgrades'],
+        )
+        self.assertEqual((staged / 'dependency-assessment').resolve(), mine.resolve())
+        self.assertTrue(skill_file.is_file())
+
+    def test_stage_needs_every_skill_named(self) -> None:
+        upgrades = install(self.installed, 'dependency-upgrades')
+        upgrades.write_text(upgrades.read_text() + '\nRead ../dependency-assessment/SKILL.md.\n')
+        with self.assertRaisesRegex(skills.SkillError, 'dependency-assessment is not installed'):
+            skills.stage('dependency-upgrades', self.tmp / 'session')
+
+    def test_settings(self) -> None:
+        self.assertEqual(project.check({'skills': {'code-review': '~/team/code-review'}}), [])
+        self.assertTrue(project.check({'skills': {'code-review': 3}}))
+        self.assertTrue(project.check({'skills': 'code-review'}))
+        path = paths.settings('o/app')
+        path.parent.mkdir(parents=True)
+        path.write_text("version = 1\n[skills]\ncode-review = '~/team/code-review'\n")
+        self.assertEqual(project.skill_paths('o/app'), {'code-review': '~/team/code-review'})
+
+    def test_run_uses_the_mapped_skill(self) -> None:
+        install(self.installed, 'code-review')
+        mine = install(self.tmp / 'team', 'code-review').parent
+        task = mine / 'SKILL.md'
+        task.write_text(
+            task.read_text()
+            .replace('Do code-review for this project', 'Team review #{pr}')
+            .replace('  mason-task', "  mason-inputs: 'pr'\n  mason-task")
+        )
+        path = paths.settings('o/app')
+        path.parent.mkdir(parents=True)
+        path.write_text(f"version = 1\n[skills]\ncode-review = '{mine}'\n")
+        project_dir = self.tmp / 'app'
+        subprocess.run(['git', 'init', '-q', str(project_dir)], check=True)
+        git = ['git', '-C', str(project_dir)]
+        subprocess.run([*git, 'remote', 'add', 'origin', 'git@github.com:o/app.git'], check=True)
+        result = subprocess.run(
+            [sys.executable, '-I', str(ROOT / 'bin' / 'artifact'), 'run', 'code-review',
+             '--project', str(project_dir), '--pr', '9', '--claude', 'true'],
+            capture_output=True, text=True, check=False,
+        )  # fmt: skip
+        self.assertEqual(result.returncode, 0, result.stderr)
+        (session,) = (paths.project_state('o/app') / 'sessions').iterdir()
+        self.assertEqual((session / '.claude' / 'skills' / 'code-review').resolve(), mine.resolve())
 
 
 if __name__ == '__main__':

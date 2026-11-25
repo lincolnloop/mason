@@ -220,14 +220,19 @@ class RunCommandTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(
-            "claude 'Run the dependency report for this project (for 2026-10).", result.stdout
+            'and follow it. Run the dependency report for this project (for 2026-10).',
+            result.stdout,
         )
         self.assertNotIn(str(paths.data_home()), result.stdout)
 
-    def test_skills_kept_for_mason_are_added_when_present(self) -> None:
+    def test_the_session_gets_its_own_skills_directory(self) -> None:
         (paths.data_home() / '.claude' / 'skills').mkdir(parents=True)
         result = mason('run', 'dependency-report', '--project', str(self.project), '--dry-run')
-        self.assertIn(f'--add-dir {paths.data_home()}', result.stdout)
+        sessions = paths.project_state('o/app') / 'sessions'
+        self.assertIn(f'--add-dir {sessions}/', result.stdout)
+        self.assertIn(f'Read {sessions}/', result.stdout)
+        self.assertNotIn(f'--add-dir {paths.data_home()}', result.stdout)
+        self.assertFalse(sessions.exists())  # a dry run stages nothing
 
     def test_by_repository_uses_masons_own_clone(self) -> None:
         result = mason('run', 'dependency-report', '--repo', 'o/app', '--dry-run')

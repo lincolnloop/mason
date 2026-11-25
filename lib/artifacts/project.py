@@ -319,9 +319,13 @@ def load(project: Path, section: str | None = None) -> dict[str, Any]:
 def check(config: dict[str, Any], required_sections: tuple[str, ...] = ()) -> list[str]:
     """Check types and unknown keys everywhere; completeness only in `required_sections`."""
     checker = Checker()
-    checker.object(
-        config, '$', required_sections, [s for s in SECTIONS if s not in required_sections]
-    )
+    optional = [s for s in SECTIONS if s not in required_sections] + ['skills']
+    checker.object(config, '$', required_sections, optional)
+    # workflow name -> the directory of the skill this project runs for it.
+    mapped = config.get('skills')
+    if 'skills' in config and checker.object(mapped, '$.skills', (), tuple(mapped or ())):
+        for name, value in mapped.items():
+            checker.string(value, f'$.skills.{name}')
     for name, section in config.items():
         keys = SECTIONS.get(name)
         if keys is None:
@@ -417,3 +421,8 @@ def settings(repo: str, env: Mapping[str, str] | None = None) -> dict[str, Any]:
     """The developer's settings file for a project, checked; empty when there is none."""
     path = paths.settings(repo, env)
     return _read(path) if path.exists() else {}
+
+
+def skill_paths(repo: str, env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """workflow -> the skill directory the project's settings map it to (`[skills]`)."""
+    return dict(settings(repo, env).get('skills', {}))

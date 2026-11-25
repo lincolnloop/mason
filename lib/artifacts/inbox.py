@@ -214,21 +214,27 @@ def local_items(repo: str, workflows: Sequence[str], env: Mapping[str, str]) -> 
     kept = token_file(env)
     problems: dict[str, list[str]] = {}
     declared = skills.workflows(env)
+    try:
+        mapping = project.skill_paths(repo, env)
+    except project.ConfigError:
+        mapping = {}  # collect() reports an invalid settings file
     for name in workflows:
-        if name not in declared:
+        if name not in declared and name not in mapping:
             found.append(
                 Item(repo, BROKEN, f'{name} is enabled but not installed', 'mason skills list')
             )
             continue
-        missing = [t for t in declared[name].env if not env.get(t) and t not in kept]
+        try:
+            skill = skills.check_resolved(name, mapping, env)
+        except skills.SkillError as exc:
+            problems.setdefault(str(exc).split(': ', 1)[-1], []).append(name)
+            continue
+        spec = skill.workflow if skill and skill.workflow else declared[name]
+        missing = [t for t in spec.env if not env.get(t) and t not in kept]
         if missing:
             found.append(
                 Item(repo, BROKEN, f'{name} needs {", ".join(missing)}', '~/.config/mason/env')
             )
-        try:
-            skills.check(name, env)
-        except skills.SkillError as exc:
-            problems.setdefault(str(exc).split(': ', 1)[-1], []).append(name)
     for problem, names in problems.items():
         if len(names) == 1:
             text = f'the {names[0]} skill: {problem}'

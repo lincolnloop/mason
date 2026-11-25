@@ -102,38 +102,43 @@ their source (from the `npx skills` lock) is still to come.
 
 ## 4. Choosing workflows per project
 
-The developer's settings for a project name the workflows it runs, and may map one to a
-particular skill:
+*Built in 0.1 (`enabled`) and 0.2 (plan step 2), except knowledge skills and tool grants.*
+
+The developer's settings for a project name the workflows it runs, and may map one to a skill
+other than the installed one, by the directory it is in:
 
 ```toml
 # ~/.config/mason/projects/acme/app.toml
 [workflows]
 enabled = ['dependency-assessment', 'dependency-upgrades', 'code-review', 'billing-reconcile']
 
-[workflows.code-review]
-skill = 'acme/team-skills:code-review'   # instead of mason's; source as in the skills lock
-knowledge = ['django-idioms']            # loaded with it (today's code-review.knowledge)
-tools = []                               # tools granted beyond the base set (§5)
+[skills]
+code-review = '~/Work/acme-skills/code-review'          # instead of mason's
+billing-reconcile = '~/Work/acme-skills/billing-reconcile'
 
 [sentry-errors]
 sentry_org = 'acme'
 sentry_project = 'app'
 ```
 
-- **Unset `enabled` means every installed workflow,** so a project with no settings behaves as it
-  does today.
-- **The skill is chosen by settings, not install order.** Two skills with the same name can be
-  installed from different sources; the mapping says which one runs. If unmapped and ambiguous,
-  `mason run` refuses and lists both.
-- **A run sees only what it uses.** `mason run` builds a per-run skills directory under the run's
-  state directory, with symlinks to the mapped workflow skill, its knowledge skills and the skills
-  it names as `../<name>/SKILL.md`. That directory, not the whole catalog, goes to `--add-dir`.
-- **The prompt names the skill's file** ("Read `<run>/skills/code-review/SKILL.md` and follow it
-  for this project…") instead of relying on its `description` matching. The description still
-  matters in a session where a person asks for a workflow by name.
-- **Settings are checked against the mapped skill's declaration.** Unknown keys stay errors. A
-  section for a workflow that isn't installed is a warning from `mason doctor`, not an error, so
-  uninstalling a skill doesn't break a project's settings.
+- **Unset `enabled` means every installed workflow,** so a project with no settings runs them
+  all.
+- **The skill is chosen by settings, not install order.** A mapping names a directory holding a
+  `SKILL.md` whose `name` is the workflow's. It may be anywhere: a team's skills repository, a
+  checkout, a copy `npx skills` installed. It must still state a `mason-requires` this mason
+  meets. Unmapped, the first installed copy runs (mason's own skills directory, then the global
+  ones).
+- **A run sees only what it uses.** `mason run` builds a skills directory for the session under
+  the project's state directory (`sessions/<stamp>-<workflow>/`), with links to the workflow's
+  skill and every skill it names as `../<name>/SKILL.md`, each mapped or installed. That
+  directory, not mason's whole skills directory, goes to `--add-dir`.
+- **The prompt names the skill's file** ("Read `<session>/.claude/skills/code-review/SKILL.md`
+  and follow it. Run the code review…") instead of relying on its `description` matching. The
+  description still matters in a session where a person asks for a workflow by name.
+- **A name that isn't installed doesn't break the settings.** `mason run` and `mason inbox` say
+  the workflow isn't installed; the file stays readable.
+- **Still to come:** knowledge skills linked into the session by the mapping (today a review
+  finds them through `code-review.knowledge`), and the tools a mapped skill may use (§5).
 
 With `--global` installs, a session started without `mason run` still sees every installed skill.
 That is the developer's choice, as now.
@@ -523,7 +528,7 @@ Each step can ship by itself. `docs/roadmap.md` places them in releases: steps 1
 | Step | Change | Behaviour seen by a developer |
 |---|---|---|
 | 1 | `mason-*` metadata in mason's skills; the engine reads it; `runner.WORKFLOWS` removed (built) | none |
-| 2 | `[workflows] enabled` and `skill`; the per-run skills directory; the prompt names the skill's file | a project runs only what it enables |
+| 2 | `[workflows] enabled` and `[skills]`; the per-run skills directory; the prompt names the skill's file (built) | a project runs only what it enables, with the skill its settings choose |
 | 3 | settings declared by skills; workflow entries removed from `project.SECTIONS` | none |
 | 4 | tool requests and grants; workflows from other sources and from the project | new workflows without engine changes |
 | 5 | `run/2` and per-skill provenance | published records name the skill's source |
