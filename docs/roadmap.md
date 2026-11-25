@@ -121,9 +121,9 @@ Results kept by mason as the master copy, published wherever the developer choos
 mason owns the schedule, and says what was done, what is due and what was missed.
 `docs/workflows.md` §9 (plan steps 8 and 9).
 
-- Schedules per workflow and project; calendar periods; the ledger, with `run/2` (its `period`
-  and the `done`, `nothing_to_do`, `failed` and `skipped` outcomes).
-- `mason status`, `due`, `overdue`, `history`, `skip`, `schedule set`.
+- Schedules per workflow and project; calendar periods; the ledger, with each run's `period`
+  and how it ended, added to `run/1` (built).
+- `mason status`, `due`, `overdue`, `history`, `skip`, `schedule set` (built).
 - `mason run-due` as a single heartbeat, and `mason schedule install`.
 - Consolidation inputs, for reports built from other reports.
 - The inbox gains overdue workflows and blocked consolidations.

@@ -1,10 +1,12 @@
 ---
 name: dependency-upgrades
 description: 'This skill should be used when asked to "run the dependency upgrades", "do the Dependabot pass", "apply the easy security upgrades" or "ship the easy dependency fixes" in a project, interactively or unattended (from a scheduler or another agent). It reads the month''s dependency assessment issue (written by dependency-assessment), refuses if alerts have opened since it was made, applies the easy upgrades one commit per package, and opens one pull request whose package and alert tables are derived from the lockfiles. It never merges: the PR, with its embedded artifacts, is the hand-off to whoever does.'
-version: 3.0.0
+version: 3.1.0
 metadata:
-  mason-requires: '>=0.2,<0.4'
+  mason-requires: '>=0.4,<0.5'
   mason-task: 'Run the dependency upgrades for this project'
+  mason-schedule: 'daily 07:00'
+  mason-kind: 'check'
   mason-tools: 'Bash(make *), Bash(npm *), Bash(pip-compile *)'
   mason-github: 'alerts'
 ---
@@ -295,6 +297,11 @@ Write `$RUN/report.md` and give it as your final answer. It says:
 - **Needs a person:** every action this run didn't take because it needed confirmation, such as
   the label or a forced range. Interactive: propose each one and do it once confirmed. Untracked
   EOL lines and major bumps are the assessment's to raise, not this run's.
+
+**Record how the run ended**, on every path, before releasing the lock: `mason run-end <RUN>
+--outcome done` when it published or changed something, `nothing_to_do` when there was
+nothing to do, or `failed` when it stopped on an error. `mason status` reads it to say what
+was done, what is due and what was missed.
 
 Then, on every path, stops included:
 ```sh

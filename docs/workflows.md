@@ -405,6 +405,15 @@ They are kept as results too, without a workflow:
 
 ## 9. Schedules and status
 
+*Built in 0.4 (plan step 8): schedules, periods, the ledger, `mason status`, `due`, `overdue`,
+`history`, `skip` and `schedule set`. How it differs from what follows: a schedule set for a
+project is written as `workflow = { every = '<schedule>', since = <date> }` under `[schedule]`,
+editing only that line; periods count from that date, or from when the project was added
+(`[project] added`, written by `mason project add`), and a project with neither has only its
+latest period judged. Run records gain `period` and the endings `done`, `nothing_to_do` and
+`failed` (`mason run-end`, which every workflow skill calls) as optional, additive fields, so
+`run/1` stays; `run/2` isn't needed. Times are the machine's local time.*
+
 Workflows run on a regular basis, and the useful question is less "can cron start it?" than
 "what was done, what is due, and what was missed?". Today mason can't answer that: schedules are
 systemd timers or cron lines written by hand (README), so mason doesn't know how often anything
@@ -574,7 +583,7 @@ Each step can ship by itself. `docs/roadmap.md` places them in releases: steps 1
 | 5 | per-skill provenance (built); `run/2` moved to step 8 | published records name the skill's source |
 | 6 | results directory, `save-result`, `mason publish`; `dependency-report` moved to it (built) | reports kept per project, published where settings say |
 | 7 | `mason note` and the `notes` skill (built) | analyses kept per project, out of the project's history |
-| 8 | schedules, periods and the ledger; `mason status`, `due`, `overdue`, `history`, `skip`, `schedule set` | what is done, due and overdue, across projects |
+| 8 | schedules, periods and the ledger; `mason status`, `due`, `overdue`, `history`, `skip`, `schedule set` (built) | what is done, due and overdue, across projects |
 | 9 | `mason run-due` and `mason schedule install`; consolidation inputs | one heartbeat runs everything on its schedule |
 | 10 | plugin packages | only if a workflow needs its own code |
 

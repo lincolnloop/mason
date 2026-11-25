@@ -241,6 +241,26 @@ Nothing in it is kept by hand: each item comes from GitHub (open PRs and issues 
 `automation` label) and this machine's run records, every time. Merging the PR, answering the
 issue, or a later run of the same workflow clears it.
 
+## Schedules
+
+Each workflow has a schedule: its skill's default (the assessment daily, the report monthly on
+the 2nd, Sentry weekly), or the one set for a project. Periods have stable keys (`2026-11-25`,
+`2026-W48`, `2026-11`, `2026-Q4`), and every run records the period it was for and how it ended,
+so mason can say what was done, what is due and what was missed:
+
+```sh
+mason status                                   # each workflow: its schedule, latest period, next due
+mason due [--within 7d]                        # due now, overdue or failed; and coming up
+mason overdue                                  # overdue or failed; exits 1 if any, for cron or a status bar
+mason history <owner>/<repo> dependency-report # each period and its state
+mason skip <owner>/<repo> dependency-report 2026-10 --reason 'project paused'
+mason schedule set <owner>/<repo> dependency-report 'weekly mon 07:00'
+```
+
+A report covers a period that has ended (October's is due on 2 November); a check runs once in
+each period. Periods count from when a project was added, or a schedule was changed, so changing
+monthly to weekly doesn't make earlier weeks overdue.
+
 ## What mason keeps
 
 A workflow's result (a monthly report, say) is kept by mason before it is published, and that

@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import deps
+from . import deps, schedules
 from ._check import ENVELOPE_FIELDS, Checker, check_envelope
 
 SCHEMA = 'run/1'
@@ -34,13 +34,20 @@ OUTCOMES = (
     'assessed',
     'report_published',
     'stopped_pr_open',
+    # How a run ended, recorded locally with `mason run-end`; `mason status` reads them.
+    'done',
+    'nothing_to_do',
+    'failed',
 )
+# What a run can say about itself at its end.
+ENDINGS = ('done', 'nothing_to_do', 'failed')
 ID_PATTERN = re.compile(r'^\d{8}-\d{6}-[a-z0-9][a-z0-9-]*$')
 
 FIELDS = ('id', 'trigger', 'started_by', 'started_at')
 # Absent while the run is in progress; the renderer that publishes the record sets it.
 # host is kept in the local record only: what is published names the tool, not the machine.
-OPTIONAL = ('host', 'outcome', 'pr', 'alerts_not_covered')
+# period: the period the run was for (schedules.py), when it has a schedule.
+OPTIONAL = ('host', 'outcome', 'pr', 'alerts_not_covered', 'period', 'ended_at')
 
 
 def validate(artifact: Any) -> list[str]:
@@ -55,6 +62,13 @@ def validate(artifact: Any) -> list[str]:
     checker.string(artifact.get('started_by'), '$.started_by', max_length=200)
     if 'host' in artifact:
         checker.string(artifact['host'], '$.host', max_length=200)
+    if 'period' in artifact and checker.string(artifact['period'], '$.period', max_length=20):
+        try:
+            schedules.from_key(artifact['period'])
+        except schedules.ScheduleError as exc:
+            checker.error('$.period', str(exc))
+    if 'ended_at' in artifact:
+        checker.timestamp(artifact['ended_at'], '$.ended_at')
     checker.timestamp(artifact.get('started_at'), '$.started_at')
     outcome = artifact.get('outcome')
     if 'outcome' in artifact:
@@ -92,6 +106,7 @@ def start(
     now: datetime | None = None,
     login: str | None = None,
     versions: Mapping[str, str] | None = None,
+    period: str | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Create the run's directory under `runs_dir` (`paths.runs(repo)`, in the developer's state
     directory) and write its record. Returns (directory, record).
@@ -116,6 +131,7 @@ def start(
         'started_by': started_by[:200],
         'host': socket.gethostname()[:200] or 'unknown',
         'started_at': f'{now:%Y-%m-%dT%H:%M:%SZ}',
+        **({'period': period} if period else {}),
     }
     directory = runs_dir / run_id
     (directory / 'findings').mkdir(parents=True)
@@ -156,3 +172,20 @@ def not_covered(
     missing = [deps.alert_summary(a) for a in alerts if a['number'] not in known]
     order = {severity: index for index, severity in enumerate(deps.SEVERITIES)}
     return sorted(missing, key=lambda a: (order.get(a['severity'], 9), a['number']))
+
+
+def end(run_dir: Path, outcome: str, now: datetime | None = None) -> dict[str, Any]:
+    """Record how a run ended in its local record, for `mason status`."""
+    if outcome not in ENDINGS:
+        raise ValueError(f'--outcome is one of {", ".join(ENDINGS)}, got {outcome!r}')
+    path = run_dir / 'run.json'
+    try:
+        record = json.loads(path.read_text(encoding='utf-8'))
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        raise ValueError(f'{path}: no readable run record: give the run directory') from exc
+    record['outcome'] = outcome
+    record['ended_at'] = f'{(now or datetime.now(UTC)):%Y-%m-%dT%H:%M:%SZ}'
+    if errors := validate(record):
+        raise ValueError(f'{path}: {errors[0]}')
+    path.write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
+    return record

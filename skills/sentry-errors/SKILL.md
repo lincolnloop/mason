@@ -1,10 +1,12 @@
 ---
 name: sentry-errors
 description: 'This skill should be used when asked to "fix the Sentry errors", "triage Sentry for production", "run the Sentry pass", "look at the unresolved errors" or "fix the N+1 queries Sentry reports" in a project, interactively or unattended (from a scheduler or another agent). It reads one environment''s unresolved Sentry issues through the API (without personal data), groups them by root cause, checks each group''s releases and history, and records every group as a finding. It fixes the most valuable fixable group as one pull request, with a regression test and a signal the retrospective checks: that the errors stop. Findings that need a person go in the PR, or in a triage issue when there is nothing to fix.'
-version: 1.1.0
+version: 1.2.0
 metadata:
-  mason-requires: '>=0.3,<0.4'
+  mason-requires: '>=0.4,<0.5'
   mason-task: 'Run the Sentry errors workflow for this project'
+  mason-schedule: 'weekly mon 07:00'
+  mason-kind: 'check'
   mason-tools: 'Bash(make *), Bash(npm *)'
   mason-env: 'SENTRY_AUTH_TOKEN'
 ---
@@ -201,6 +203,11 @@ The triage is kept as mason's copy first, then published where the project's set
 If there is nothing new, open nothing: say so in the report.
 
 ## Step 9: Report, release the lock
+
+**Record how the run ended**, on every path, before releasing the lock: `mason run-end <RUN>
+--outcome done` when it published or changed something, `nothing_to_do` when there was
+nothing to do, or `failed` when it stopped on an error. `mason status` reads it to say what
+was done, what is due and what was missed.
 
 Give the PR or triage issue link, the group fixed and its impact, the groups skipped because
 they're already open, and **Needs a person**: the archive and data-fix proposals. Then, on every

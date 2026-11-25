@@ -129,6 +129,7 @@ class PlanTests(unittest.TestCase):
         self.assertFalse(plan.settings.exists())  # planning writes nothing
         settings = tomllib.loads(plan.settings_text)
         self.assertEqual(settings['workflows'], {'enabled': ['dependency-upgrades', 'code-review']})
+        self.assertIn('added = ', plan.settings_text)
         self.assertEqual(settings['repo'], {})  # detected values are commented out, not pinned
         self.assertIn('# name = "o/app"', plan.settings_text)
         self.assertNotIn('[sentry-errors]', plan.settings_text)  # only what these workflows read
@@ -240,13 +241,18 @@ class ManageTests(unittest.TestCase):
         self.assertEqual(paths.settings(REPO).read_text().rstrip(), before.rstrip())
         self.assertIn('is not archived', projects.unarchive(REPO))
 
-    def test_archive_refusals(self) -> None:
+    def test_archive_refusals_and_an_existing_section(self) -> None:
         with self.assertRaisesRegex(projects.ProjectError, 'is not added'):
             projects.archive('o/missing', '2026-11-25')
         path = paths.settings(REPO)
-        path.write_text(path.read_text() + "\n[project]\narchived = '2026-11-01'\n")
-        with self.assertRaisesRegex(projects.ProjectError, 'edited; remove `archived` by hand'):
-            projects.unarchive(REPO)
+        path.write_text(path.read_text() + '\n[project]\nadded = 2026-11-01\n')
+        projects.archive(REPO, '2026-11-25')
+        self.assertEqual(
+            (project.archived(REPO), project.added(REPO).isoformat()), ('2026-11-25', '2026-11-01')
+        )
+        projects.unarchive(REPO)
+        self.assertIn('added = 2026-11-01', path.read_text())
+        self.assertIsNone(project.archived(REPO))
 
     def test_remove(self) -> None:
         clone, state = paths.clone(REPO), paths.project_state(REPO)

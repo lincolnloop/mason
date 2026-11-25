@@ -1,10 +1,12 @@
 ---
 name: code-review-retrospective
 description: 'This skill should be used when asked to "run the code review retrospective", "how are the automated reviews doing", "what do people do with the review findings" or "improve the code review skill" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over code-review: a script collects what happened to every finding the reviews posted over a period (whether the flagged lines changed, what a follow-up review concluded, what people replied), and this skill judges which findings people found right, wrong or not worth it. It opens one report issue, proposes changes to the review skill as a PR when a pattern holds across PRs, and proposes project rules where the project disagrees with the review.'
-version: 1.2.0
+version: 1.3.0
 metadata:
-  mason-requires: '>=0.3,<0.4'
+  mason-requires: '>=0.4,<0.5'
   mason-task: 'Run the code review retrospective for this project'
+  mason-schedule: 'monthly day 3 06:00'
+  mason-kind: 'report'
   mason-tools: 'Bash(uv run --locked python -m unittest *), Bash(ruff *)'
 ---
 
@@ -153,6 +155,11 @@ Only for `skill_change` findings. The procedure is the dependency retrospective'
 `skills/code-review/SKILL.md` as the file changed.
 
 ## Step 7: Report, release the lock
+
+**Record how the run ended**, on every path, before releasing the lock: `mason run-end <RUN>
+--outcome done` when it published or changed something, `nothing_to_do` when there was
+nothing to do, or `failed` when it stopped on an error. `mason status` reads it to say what
+was done, what is due and what was missed.
 
 Give the report issue's link; how many findings were posted and acted on, by category; each
 finding of this run by area; the skill-change PR link, or why there is none; and **Needs a

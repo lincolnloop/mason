@@ -1,10 +1,12 @@
 ---
 name: sentry-retrospective
 description: 'This skill should be used when asked to "run the Sentry retrospective", "did the Sentry fixes work", "are the errors coming back" or "how are we doing on Sentry errors" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over sentry-errors: a script checks, for every fix PR, whether its Sentry issues stopped after the merge, and collects the triage issues and what is still unresolved. This skill judges why fixes didn''t work, what keeps recurring, and what the project should change so the same class of error doesn''t ship again. It opens one report issue, and proposes skill changes as a PR when the evidence warrants it.'
-version: 1.1.0
+version: 1.2.0
 metadata:
-  mason-requires: '>=0.3,<0.4'
+  mason-requires: '>=0.4,<0.5'
   mason-task: 'Run the Sentry retrospective for this project'
+  mason-schedule: 'monthly day 3 06:00'
+  mason-kind: 'report'
   mason-tools: 'Bash(uv run --locked python -m unittest *), Bash(ruff *)'
   mason-env: 'SENTRY_AUTH_TOKEN'
 ---
@@ -147,6 +149,11 @@ Only for `skill_change` findings. The procedure is the dependency retrospective'
 `skills/sentry-errors/SKILL.md` as the file changed.
 
 ## Step 7: Report, release the lock
+
+**Record how the run ended**, on every path, before releasing the lock: `mason run-end <RUN>
+--outcome done` when it published or changed something, `nothing_to_do` when there was
+nothing to do, or `failed` when it stopped on an error. `mason status` reads it to say what
+was done, what is due and what was missed.
 
 Give the report issue's link; how many fixes worked, didn't, and are still being watched; each
 finding by area; the skill-change PR link, or why there is none; and **Needs a person**: the

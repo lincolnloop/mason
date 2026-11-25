@@ -3,6 +3,16 @@
 What changed in each release of mason, for the developers who install it. Install the engine and
 its skills from the same tag: each skill states the mason versions it works with.
 
+## Unreleased (0.4)
+
+- Schedules: each workflow skill declares a default (`mason-schedule`, `mason-kind`), and a
+  project can set its own (`mason schedule set`). `mason status`, `due`, `overdue` and `history`
+  say what was done, what is due and what was missed; `mason skip` records a period deliberately
+  not run.
+- Every run records the period it was for, and how it ended (`mason run-end`, which every
+  workflow skill now calls). The skills need this mason: reinstall them.
+- `mason project add` records the date a project was added; its schedules count from then.
+
 ## 0.3.0
 
 - Results: `mason save-result` keeps a workflow's output in mason, per project, as the master

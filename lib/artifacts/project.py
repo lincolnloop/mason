@@ -18,13 +18,15 @@ format change can refuse an old file with instructions rather than misread it.
 """
 
 import json
+import re
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from . import detect, paths, skills
+from . import detect, paths, schedules, skills
 from ._check import REPO_PATTERN, Checker
 
 # Where the file used to be kept: in the project. A `mason.toml` at a project's root is still
@@ -45,7 +47,8 @@ SECTIONS: dict[str, dict[str, tuple[str, bool]]] = {
     # The workflows the developer runs on this project. Unset: every workflow.
     'workflows': {'enabled': ('list', False)},
     # Set by `mason project archive`: the date it was archived. An archived project runs nothing.
-    'project': {'archived': ('str', False)},
+    # Set by `mason project add`: the date it was added. Its schedules count from then.
+    'project': {'archived': ('str', False), 'added': ('date', False)},
     'repo': {'name': ('str', True), 'main_branch': ('str', True)},
     'limits': {'open_agent_prs': ('int', True), 'stale_after_days': ('int', True)},
     'verify': {
@@ -244,7 +247,7 @@ def resolve(project: Path, env: Mapping[str, str] | None = None) -> Resolved:
                 resolved.sources[(section, key)] = 'default'
         if values or section in file_config:
             resolved.config[section] = values
-    for section in sorted(set(file_config) - set(sections) - {'skills', 'grants'}):
+    for section in sorted(set(file_config) - set(sections) - {'skills', 'grants', 'schedule'}):
         resolved.notes.append(f'[{section}] is for no installed workflow, so it is not read')
     for path in detect.unsupported_lockfiles(detect.tracked_files(project)):
         resolved.notes.append(f'{path}: not read; dependency-upgrades supports pip-compile and npm')
@@ -296,6 +299,18 @@ def check(
     if 'skills' in config and checker.object(mapped, '$.skills', (), tuple(mapped or ())):
         for name, value in mapped.items():
             checker.string(value, f'$.skills.{name}')
+    # workflow name -> how often it runs: a schedule, or {every = <schedule>, since = <date>}.
+    planned = config.get('schedule')
+    if 'schedule' in config and checker.object(planned, '$.schedule', (), tuple(planned or ())):
+        for name, value in planned.items():
+            where = f'$.schedule.{name}'
+            if isinstance(value, dict):
+                if checker.object(value, where, ('every',), ('since',)):
+                    _check_schedule(checker, value.get('every'), f'{where}.every')
+                    if 'since' in value and not isinstance(value['since'], date):
+                        checker.error(f'{where}.since', 'must be a date, e.g. 2026-11-25')
+            else:
+                _check_schedule(checker, value, where)
     # workflow name -> the tools its mapped skill may use unattended.
     granted = config.get('grants')
     if 'grants' in config and checker.object(granted, '$.grants', (), tuple(granted or ())):
@@ -321,6 +336,9 @@ def check(
                     checker.error(where, f'must be one of {", ".join(setting.choices)}')
             elif setting.kind == 'bool':
                 checker.boolean(value, where)
+            elif setting.kind == 'date':
+                if not isinstance(value, date) or isinstance(value, datetime):
+                    checker.error(where, 'must be a date, e.g. 2026-11-25')
             elif setting.kind == 'int':
                 checker.integer(value, where, minimum=1)
             else:
@@ -368,6 +386,8 @@ def _toml_value(value: Any) -> str:
     # and lists of str.
     if isinstance(value, bool):
         return 'true' if value else 'false'
+    if isinstance(value, date):
+        return value.isoformat()
     if isinstance(value, list):
         return '[' + ', '.join(json.dumps(item) for item in value) + ']'
     return json.dumps(value)
@@ -414,3 +434,86 @@ def value(repo: str, section: str, key: str, env: Mapping[str, str] | None = Non
     declared = schema(found.get('skills'), env).get(section)
     setting = declared.keys.get(key) if declared else None
     return setting.default if setting else None
+
+
+def _check_schedule(checker: Checker, value: Any, where: str) -> None:
+    if checker.string(value, where):
+        try:
+            schedules.parse(value)
+        except schedules.ScheduleError as exc:
+            checker.error(where, str(exc))
+
+
+@dataclass
+class Planned:
+    """How often a workflow runs on a project, and since when."""
+
+    schedule: schedules.Schedule
+    # 'settings' or 'skill' (its default).
+    source: str
+    # When the project's settings last changed it: periods before are judged by no schedule.
+    since: date | None = None
+
+
+def planned(
+    repo: str, workflow: str, spec: skills.Workflow, env: Mapping[str, str] | None = None
+) -> Planned:
+    value = settings(repo, env).get('schedule', {}).get(workflow)
+    if value is None:
+        return Planned(schedules.parse(spec.schedule), 'skill')
+    if isinstance(value, dict):
+        return Planned(schedules.parse(value['every']), 'settings', value.get('since'))
+    return Planned(schedules.parse(value), 'settings')
+
+
+def set_line(path: Path, section: str, key: str, value: str | None) -> None:
+    """Set one `key = value` line in a section of a settings file, or remove it (`value` None),
+    leaving every other line, comments included, as it was. The section is added at the end if
+    the file has none. The file is checked before and after."""
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f'version = {CONFIG_VERSION}\n', encoding='utf-8')
+    _read(path)  # refuse a file that is already invalid, rather than add to it
+    lines = path.read_text(encoding='utf-8').splitlines()
+    header = f'[{section}]'
+    line = None if value is None else f'{key} = {value}'
+    pattern = re.compile(rf'^\s*"?{re.escape(key)}"?\s*=')
+    if header not in lines:
+        if line is not None:
+            lines += ['', header, line]
+    else:
+        start = lines.index(header)
+        end = next(
+            (i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith('[')),
+            len(lines),
+        )
+        found = next((i for i in range(start + 1, end) if pattern.match(lines[i])), None)
+        if found is not None and line is None:
+            del lines[found]
+            if not any(lines[i].strip() for i in range(start + 1, end - 1)):
+                # The section is empty now: remove its header, and the blank line before it.
+                del lines[start : end - 1]
+                if start and not lines[start - 1].strip():
+                    del lines[start - 1]
+        elif found is not None:
+            lines[found] = line
+        elif line is not None:
+            lines.insert(start + 1, line)
+    path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    _read(path)
+
+
+def set_schedule(
+    repo: str, workflow: str, text: str, today: date, env: Mapping[str, str] | None = None
+) -> Path:
+    """Write a workflow's schedule into the project's settings, with the date it changed."""
+    schedule = schedules.parse(text)
+    path = paths.settings(repo, env)
+    set_line(path, 'schedule', workflow, f"{{ every = '{schedule}', since = {today.isoformat()} }}")
+    return path
+
+
+def added(repo: str, env: Mapping[str, str] | None = None) -> date | None:
+    """When the project was added (`mason project add`): its schedules count from then."""
+    value = settings(repo, env).get('project', {}).get('added')
+    return value if isinstance(value, date) else None

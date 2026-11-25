@@ -11,6 +11,7 @@ import re
 import shlex
 import subprocess
 import sys
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ from . import (
     doctor,
     embed,
     inbox,
+    ledger,
     lock,
     notes,
     outcomes,
@@ -38,6 +40,7 @@ from . import (
     review_outcomes,
     run,
     runner,
+    schedules,
     sentry,
     sentry_outcomes,
     skills,
@@ -266,6 +269,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     cmd.add_argument('project', type=project_dir, help=PROJECT_HELP)
     cmd.add_argument('workflow', help='e.g. dependency-upgrades')
+    cmd.add_argument(
+        '--period', help='the period it is for (default: MASON_PERIOD, or from the schedule)'
+    )
+
+    cmd = commands.add_parser(
+        'run-end', help='record how a run ended (done, nothing_to_do, failed), for mason status'
+    )
+    cmd.add_argument('run', type=Path, help="the run's directory (run-start's `dir`)")
+    cmd.add_argument('--outcome', required=True, choices=run.ENDINGS)
 
     cmd = commands.add_parser('extract', help='print the artifacts embedded in markdown as JSON')
     cmd.add_argument('input', type=Path, nargs='?', help='markdown (default: stdin)')
@@ -368,6 +380,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     cmd.add_argument('--pr', type=int, help='the pull request, for a workflow that acts on one')
     cmd.add_argument('--request', default='', help='added to the request, e.g. "for October 2026"')
+    cmd.add_argument(
+        '--period', help='the period this run is for, e.g. 2026-10 (default: from the schedule)'
+    )
     cmd.add_argument('--unattended', action='store_true', help='headless: ask nothing, log it')
     cmd.add_argument(
         '--allow',
@@ -513,6 +528,37 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_argument('--repo', help=repo_help)
     sub.add_argument('--link', help='where the project now keeps it: a PR, an issue, a page')
     sub.add_argument('--by', dest='superseded_by', metavar='KEY', help='for superseded: the note')
+
+    for name, help_text in (
+        ('status', 'each scheduled workflow: its schedule, its latest period, the next one due'),
+        ('due', 'periods due now, overdue or failed; with --within, those coming up too'),
+        ('overdue', 'periods overdue or failed; exits 1 if there are any'),
+    ):
+        cmd = commands.add_parser(name, help=help_text)
+        cmd.add_argument('--repo', action='append', default=[], help='owner/name; repeatable')
+        if name == 'due':
+            cmd.add_argument('--within', help='also list what comes due within this, e.g. 7d')
+
+    cmd = commands.add_parser(
+        'history', help="one workflow's periods on a project, and their state"
+    )
+    cmd.add_argument('repo', help='owner/name')
+    cmd.add_argument('workflow')
+    cmd.add_argument('--count', type=int, default=12)
+
+    cmd = commands.add_parser('skip', help='record that a period is deliberately not run')
+    cmd.add_argument('repo', help='owner/name')
+    cmd.add_argument('workflow')
+    cmd.add_argument('period', help='e.g. 2026-10 or 2026-W47')
+    cmd.add_argument('--reason', required=True)
+
+    cmd = commands.add_parser('schedule', help="show the projects' schedules, or set one")
+    action = cmd.add_subparsers(dest='action')
+    sub = action.add_parser('set', help='set how often a workflow runs on a project')
+    sub.add_argument('repo', help='owner/name')
+    sub.add_argument('workflow')
+    sub.add_argument('schedule', help="e.g. 'weekly mon 07:00', 'monthly day 2', 'off'")
+    cmd.add_argument('--repo', action='append', default=[], help='owner/name; repeatable')
 
     cmd = commands.add_parser('lock', help='take or release the one-run-at-a-time lock')
     cmd.add_argument('action', choices=('acquire', 'release'))
@@ -954,9 +1000,16 @@ def _run_start(args: argparse.Namespace) -> str:
         if skill.version:
             versions['skill_version'] = skill.version
         versions['skill_source'] = skills.provenance(args.workflow, skill, mapping)
+    period = args.period or os.environ.get('MASON_PERIOD') or _period_now(skill)
+    if period:
+        try:
+            schedules.from_key(period)
+        except schedules.ScheduleError as exc:
+            raise Refused(f'--period: {exc}') from exc
     directory, record = run.start(
-        paths.runs(repo), args.workflow, repo, _version(args).strip(), versions=versions
-    )
+        paths.runs(repo), args.workflow, repo, _version(args).strip(), versions=versions,
+        period=period,
+    )  # fmt: skip
     branch = f'{args.workflow}-{record["id"].removesuffix("-" + args.workflow)}'
     return (
         json.dumps({'dir': str(directory), 'id': record['id'], 'branch': branch}, indent=2) + '\n'
@@ -1185,6 +1238,20 @@ def _run(args: argparse.Namespace) -> str:
             f'{args.workflow} is not enabled for {repo}: add it to `enabled` under [workflows] '
             f'in {paths.settings(repo)}'
         )
+    try:
+        planned = project.planned(repo, args.workflow, spec)
+    except (project.ConfigError, schedules.ScheduleError) as exc:
+        raise Refused(str(exc)) from exc
+    period = args.period
+    if period is None and planned.schedule.interval is not None:
+        period = schedules.current_key(planned.schedule.interval, spec.kind, datetime.now())
+    if period:
+        try:
+            schedules.from_key(period)
+        except schedules.ScheduleError as exc:
+            raise Refused(f'--period: {exc}') from exc
+        if not args.request:
+            args.request = f'for {period}'
     state = paths.project_state(repo)
     # The session's own skills directory: this workflow's skill and the skills it names, linked
     # from where the settings or the install put them, so it sees no others of mason's.
@@ -1207,12 +1274,14 @@ def _run(args: argparse.Namespace) -> str:
             skill_file,
         )  # fmt: skip
         env = dict(os.environ)
+    if period:
+        env['MASON_PERIOD'] = period
     if args.dry_run:
         marks = (
             f'MASON_UNATTENDED=1 MASON_TRIGGER={shlex.quote(args.trigger)} '
             if args.unattended
             else ''
-        )
+        ) + (f'MASON_PERIOD={period} ' if period else '')
         return f'cd {shlex.quote(str(directory))} && {marks}{shlex.join(command)}\n'
     state.mkdir(parents=True, exist_ok=True)
     if args.unattended:
@@ -1413,6 +1482,102 @@ def _note(args: argparse.Namespace) -> str:
         raise Refused(str(exc)) from exc
 
 
+def _period_now(skill: skills.Skill | None) -> str | None:
+    """The period a run started now is for, from its skill's default schedule. `mason run`
+    passes the project's (MASON_PERIOD); this is for a run started any other way."""
+    if skill is None or skill.workflow is None:
+        return None
+    schedule = schedules.parse(skill.workflow.schedule)
+    if schedule.interval is None:
+        return None
+    return schedules.current_key(schedule.interval, skill.workflow.kind, datetime.now())
+
+
+def _run_end(args: argparse.Namespace) -> str:
+    try:
+        record = run.end(args.run, args.outcome)
+    except ValueError as exc:
+        raise Refused(str(exc)) from exc
+    period = f' for {record["period"]}' if record.get('period') else ''
+    return f'{record["id"]}{period}: {record["outcome"]}\n'
+
+
+def _repos(given: Sequence[str]) -> list[str]:
+    added = projects.added()
+    for repo in given:
+        if repo not in added:
+            raise Refused(f'--repo: {repo} is not added: `mason project add {repo}`')
+    return list(given) or added
+
+
+def _rows(args: argparse.Namespace) -> list[ledger.Row]:
+    try:
+        return ledger.overview(_repos(args.repo))
+    except (project.ConfigError, ledger.LedgerError, schedules.ScheduleError) as exc:
+        raise Refused(str(exc)) from exc
+
+
+def _status(args: argparse.Namespace) -> str:
+    return ledger.render_status(_rows(args))
+
+
+def _due(args: argparse.Namespace) -> str:
+    rows = _rows(args)
+    text = ledger.render_open(rows, (ledger.DUE, ledger.OVERDUE, ledger.FAILED))
+    if args.within:
+        try:
+            until = datetime.now() + schedules.duration(args.within)
+        except schedules.ScheduleError as exc:
+            raise Refused(f'--within: {exc}') from exc
+        for row in rows:
+            if row.following and row.following.due <= until:
+                text += (
+                    f'{row.repo}  {row.workflow}  {row.following.key}  upcoming, due '
+                    f'{row.following.due:%Y-%m-%d %H:%M}\n'
+                )
+    return text or 'Nothing is due.\n'
+
+
+def _overdue(args: argparse.Namespace) -> str:
+    text = ledger.render_open(_rows(args), (ledger.OVERDUE, ledger.FAILED))
+    if text:
+        raise Answer(text.rstrip('\n'))
+    return 'Nothing is overdue.\n'
+
+
+def _history(args: argparse.Namespace) -> str:
+    try:
+        skill = skills.resolve(args.workflow, project.skill_paths(args.repo))
+        if skill is None or skill.workflow is None:
+            raise Refused(f'{args.workflow} is not an installed workflow')
+        planned, slots, following = ledger.history(
+            args.repo, args.workflow, skill.workflow, datetime.now(), args.count
+        )
+    except (project.ConfigError, skills.SkillError, schedules.ScheduleError) as exc:
+        raise Refused(str(exc)) from exc
+    header = f'{args.repo}: {planned.schedule} ({planned.source})\n'
+    return header + ledger.render_history(args.workflow, slots, following)
+
+
+def _skip(args: argparse.Namespace) -> str:
+    try:
+        return ledger.skip(args.repo, args.workflow, args.period, args.reason)
+    except ledger.LedgerError as exc:
+        raise Refused(str(exc)) from exc
+
+
+def _schedule(args: argparse.Namespace) -> str:
+    if args.action == 'set':
+        try:
+            path = project.set_schedule(
+                args.repo, args.workflow, args.schedule, datetime.now().date()
+            )
+        except (project.ConfigError, schedules.ScheduleError, ValueError) as exc:
+            raise Refused(str(exc)) from exc
+        return f'{args.repo} {args.workflow}: {schedules.parse(args.schedule)}, in {path}\n'
+    return _status(args)
+
+
 def _lock(args: argparse.Namespace) -> str:
     try:
         repo = project.load(args.project)['repo']['name']
@@ -1440,6 +1605,13 @@ COMMANDS = {
     'publish': _publish,
     'results': _results,
     'note': _note,
+    'run-end': _run_end,
+    'status': _status,
+    'due': _due,
+    'overdue': _overdue,
+    'history': _history,
+    'skip': _skip,
+    'schedule': _schedule,
     'run': _run,
     'skills': _skills,
     'validate': _validate,

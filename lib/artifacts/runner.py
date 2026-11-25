@@ -221,14 +221,18 @@ def run(
         result = subprocess.run(
             args, cwd=project, env=env, stdout=handle, stderr=subprocess.STDOUT, check=False
         )
-    write_status(log, result.returncode)
+    write_status(log, result.returncode, period=env.get('MASON_PERIOD'))
     return result.returncode, log
 
 
-def write_status(log: Path, status: int, now: datetime | None = None) -> Path:
+def write_status(
+    log: Path, status: int, now: datetime | None = None, period: str | None = None
+) -> Path:
     """Record how an unattended run ended, beside its log, so `mason inbox` can find failures."""
     path = log.with_name(log.name.removesuffix('.log') + '.status.json')
     finished = (now or datetime.now(UTC)).strftime('%Y-%m-%d %H:%M UTC')
     record = {'status': status, 'log': str(log), 'finished_at': finished}
+    if period:
+        record['period'] = period
     path.write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
     return path

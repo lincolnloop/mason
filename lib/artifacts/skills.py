@@ -31,10 +31,11 @@ import subprocess
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-from . import paths, version
+from . import paths, schedules, version
 
 INPUTS = ('pr',)
 GITHUB = ('alerts', 'discussions')
@@ -45,7 +46,7 @@ class SkillError(Exception):
     pass
 
 
-KINDS = {'str': str, 'bool': bool, 'int': int, 'list': list}
+KINDS = {'str': str, 'bool': bool, 'int': int, 'list': list, 'date': date}
 SETTINGS_FILE = 'settings.toml'
 
 
@@ -140,6 +141,14 @@ class Workflow:
     # What the GitHub login must reach besides pushing branches and opening issues and PRs,
     # which every workflow does: 'alerts' (Dependabot alerts), 'discussions'.
     github: tuple[str, ...] = ()
+    # How often it runs unless a project's settings say otherwise (schedules.py), whether a
+    # run covers a period that has ended ('report') or runs once in each ('check'), which
+    # missed periods to run ('all' or 'latest'), and how long after it is due a period's run
+    # counts as overdue.
+    schedule: str = 'off'
+    kind: str = 'check'
+    catch_up: str = 'latest'
+    grace: str = '1d'
 
 
 def directories(env: Mapping[str, str] | None = None) -> list[Path]:
@@ -302,12 +311,29 @@ def _workflow(metadata: Mapping[str, str]) -> Workflow | None:
             raise SkillError(f'{name}: unknown {", ".join(unknown)} (known: {", ".join(known)})')
     if ('{pr}' in task) != ('pr' in inputs):
         raise SkillError("mason-task names {pr} exactly when mason-inputs has 'pr'")
+    schedule = metadata.get('mason-schedule', 'off')
+    kind = metadata.get('mason-kind', 'check')
+    catch_up = metadata.get('mason-catch-up', 'all' if kind == 'report' else 'latest')
+    grace = metadata.get('mason-grace', '1d')
+    try:
+        schedules.parse(schedule)
+        schedules.duration(grace)
+    except schedules.ScheduleError as exc:
+        raise SkillError(str(exc)) from exc
+    if kind not in schedules.KINDS:
+        raise SkillError(f'mason-kind: report or check, got {kind!r}')
+    if catch_up not in ('all', 'latest'):
+        raise SkillError(f'mason-catch-up: all or latest, got {catch_up!r}')
     return Workflow(
         task=task,
         tools=_list(metadata.get('mason-tools')),
         needs_pr='pr' in inputs,
         env=_list(metadata.get('mason-env')),
         github=github,
+        schedule=schedule,
+        kind=kind,
+        catch_up=catch_up,
+        grace=grace,
     )
 
 

@@ -211,7 +211,8 @@ class RunCommandTests(unittest.TestCase):
             'timer',
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('MASON_UNATTENDED=1 MASON_TRIGGER=timer claude -p', result.stdout)
+        self.assertIn('MASON_UNATTENDED=1 MASON_TRIGGER=timer MASON_PERIOD=', result.stdout)
+        self.assertIn(' claude -p ', result.stdout)
         self.assertIn(str(paths.project_state('o/app')), result.stdout)
 
     def test_interactive_dry_run_in_the_current_directory(self) -> None:

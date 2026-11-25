@@ -14,6 +14,7 @@ import shutil
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
 from . import paths, project, skills, workspace
@@ -167,6 +168,7 @@ def plan(
     run_gh: Gh = gh,
     env: Mapping[str, str] | None = None,
     clone: Callable[[str, Path], str] = workspace.ensure_clone,
+    today: date | None = None,
 ) -> Plan:
     """Clone (or fetch) the repository and work out what adding it means. Writes nothing else."""
     env = os.environ if env is None else env
@@ -198,9 +200,11 @@ def plan(
     keep = (*project.SHARED_SECTIONS, *workflows)
     resolved.config = {
         'workflows': {'enabled': list(workflows)},
+        'project': {'added': today or date.today()},
         **{name: values for name, values in resolved.config.items() if name in keep},
     }
     resolved.sources[('workflows', 'enabled')] = 'file'
+    resolved.sources[('project', 'added')] = 'file'
     resolved.file_path = settings
     missing = {}
     for name in workflows:
@@ -245,11 +249,6 @@ def apply(p: Plan, run_gh: Gh = gh) -> str:
 
 # A run's directory (`<stamp>-<workflow>`) or log (`<stamp>-<workflow>.log`).
 RUN_NAME = re.compile(r'^(\d{8})-(\d{6})-([a-z0-9][a-z0-9-]*?)(?:\.log)?$')
-ARCHIVE_BLOCK = (
-    '\n[project]\n'
-    '# Set by `mason project archive`; remove it to run the project again.\n'
-    "archived = '{date}'\n"
-)
 
 
 @dataclass
@@ -332,28 +331,20 @@ def archive(repo: str, today: str, env: Mapping[str, str] | None = None) -> str:
     try:
         if when := project.archived(repo, env):
             return f'{repo} was already archived on {when}.\n'
-        if 'project' in project.settings(repo, env):
-            raise ProjectError(f'{path} already has a [project] section: add `archived` to it')
+        project.set_line(path, 'project', 'archived', f"'{today}'")
     except project.ConfigError as exc:
         raise ProjectError(str(exc)) from exc
-    text = path.read_text(encoding='utf-8')
-    path.write_text(text.rstrip('\n') + '\n' + ARCHIVE_BLOCK.format(date=today), encoding='utf-8')
     return f'Archived {repo}: it runs nothing until `mason project archive {repo} --undo`.\n'
 
 
 def unarchive(repo: str, env: Mapping[str, str] | None = None) -> str:
     path = _settings_file(repo, env)
     try:
-        when = project.archived(repo, env)
+        if not project.archived(repo, env):
+            return f'{repo} is not archived.\n'
+        project.set_line(path, 'project', 'archived', None)
     except project.ConfigError as exc:
         raise ProjectError(str(exc)) from exc
-    if not when:
-        return f'{repo} is not archived.\n'
-    text = path.read_text(encoding='utf-8')
-    block = ARCHIVE_BLOCK.format(date=when)
-    if block not in text:
-        raise ProjectError(f'{path}: the [project] section was edited; remove `archived` by hand')
-    path.write_text(text.replace(block, ''), encoding='utf-8')
     return f'{repo} runs again.\n'
 
 

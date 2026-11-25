@@ -1,10 +1,11 @@
 ---
 name: code-review
 description: 'This skill should be used when asked to "review PR #N", "review this pull request", "do a code review of #N", "re-review #N" or "follow up on the review of #N" in a project, interactively or unattended (from a scheduler or another agent). It gathers the pull request, its diff annotated with line coordinates, and any earlier review by this skill; reviews the change against the project''s own rules; writes the findings as a validated review.json; and posts one consolidated review that neither approves nor blocks. A follow-up review reports what happened to each earlier finding.'
-version: 1.2.1
+version: 1.3.0
 metadata:
-  mason-requires: '>=0.2,<0.4'
+  mason-requires: '>=0.4,<0.5'
   mason-task: 'Run the code review for pull request #{pr} in this project'
+  mason-schedule: 'off'
   mason-inputs: 'pr'
 ---
 
@@ -181,6 +182,11 @@ The payload is bound to `head_sha`. If GitHub refuses it because the PR moved on
 old review: say so in the report, and stop.
 
 ## Step 7: Report, release the lock
+
+**Record how the run ended**, on every path, before releasing the lock: `mason run-end <RUN>
+--outcome done` when it published or changed something, `nothing_to_do` when there was
+nothing to do, or `failed` when it stopped on an error. `mason status` reads it to say what
+was done, what is due and what was missed.
 
 Give the review's link, its disposition and counts (from `comment.md`), and, for a follow-up,
 how many earlier findings were addressed, declined, withdrawn and still open. Then, on every
