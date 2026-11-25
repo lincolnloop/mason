@@ -16,7 +16,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import paths, project, runner, workspace
+from . import paths, project, skills, workspace
 
 LABEL = 'automation'
 LABEL_DESCRIPTION = 'Opened by an agent workflow'
@@ -50,8 +50,9 @@ class Access:
     def problems(self, workflows: Sequence[str]) -> list[str]:
         """What stops the given workflows, as sentences naming the workflows affected."""
         needs: dict[str, list[str]] = {}
+        declared = skills.workflows()
         for name in workflows:
-            for need in ('write', *runner.WORKFLOWS[name].github):
+            for need in ('write', *(declared[name].github if name in declared else ())):
                 needs.setdefault(need, []).append(name)
         problems = []
         if 'write' in needs and not self.write:
@@ -98,7 +99,7 @@ def _first_line(text: str) -> str:
 def choose(text: str) -> list[str]:
     """Workflows from what a person typed: names or numbers from `menu()`, separated by commas or
     spaces; empty or `all` for every one."""
-    names = sorted(runner.WORKFLOWS)
+    names = sorted(skills.workflows())
     words = text.replace(',', ' ').split()
     if not words or words == ['all']:
         return names
@@ -106,7 +107,7 @@ def choose(text: str) -> list[str]:
     for word in words:
         if word.isdigit() and 1 <= int(word) <= len(names):
             name = names[int(word) - 1]
-        elif word in runner.WORKFLOWS:
+        elif word in names:
             name = word
         else:
             raise ProjectError(f'{word!r} is not a workflow (known: {", ".join(names)})')
@@ -116,7 +117,7 @@ def choose(text: str) -> list[str]:
 
 
 def menu() -> str:
-    lines = [f'{i:>3}. {name}' for i, name in enumerate(sorted(runner.WORKFLOWS), start=1)]
+    lines = [f'{i:>3}. {name}' for i, name in enumerate(sorted(skills.workflows()), start=1)]
     return '\n'.join(lines)
 
 
@@ -174,6 +175,11 @@ def plan(
         directory = paths.clone(repo, env)
     except ValueError as exc:
         raise ProjectError(str(exc)) from exc
+    declared = skills.workflows(env)
+    if unknown := [name for name in workflows if name not in declared]:
+        raise ProjectError(
+            f'not installed: {", ".join(unknown)} (installed: {", ".join(declared) or "none"})'
+        )
     if settings.exists():
         raise ProjectError(
             f'{repo} is already added: its settings are in {settings}. Edit that file to change '
@@ -205,7 +211,7 @@ def plan(
                 problems = [line.removeprefix('- ') for line in str(exc).splitlines()[1:]]
                 missing[name] = '; '.join(problems) or str(exc)
     access = check_access(repo, run_gh)
-    tokens = sorted({t for n in workflows for t in runner.WORKFLOWS[n].env if not env.get(t)})
+    tokens = sorted({t for n in workflows for t in declared[n].env if not env.get(t)})
     return Plan(
         repo=repo,
         clone=directory,

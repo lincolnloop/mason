@@ -4,6 +4,9 @@ description: 'This skill should be used when asked to "run the dependency retros
 version: 1.1.0
 metadata:
   mason-requires: '>=0.1,<0.2'
+  mason-task: 'Run the dependency retrospective for this project'
+  mason-tools: 'Bash(uv run --locked python -m unittest *), Bash(ruff *)'
+  mason-github: 'alerts'
 ---
 
 # Dependency retrospective

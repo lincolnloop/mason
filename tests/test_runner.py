@@ -8,7 +8,7 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
-from artifacts import paths, runner, workspace
+from artifacts import paths, runner, skills, workspace
 
 from . import HOME, ROOT
 
@@ -89,8 +89,8 @@ class HeadlessCommandTests(unittest.TestCase):
 
     def test_sentry_workflows_declare_their_token(self) -> None:
         for name in ('sentry-errors', 'sentry-retrospective'):
-            self.assertIn('SENTRY_AUTH_TOKEN', runner.WORKFLOWS[name].env)
-        self.assertEqual(runner.WORKFLOWS['code-review'].env, ())
+            self.assertIn('SENTRY_AUTH_TOKEN', skills.workflows()[name].env)
+        self.assertEqual(skills.workflows()['code-review'].env, ())
 
 
 class InteractiveCommandTests(unittest.TestCase):

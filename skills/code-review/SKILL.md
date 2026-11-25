@@ -4,6 +4,8 @@ description: 'This skill should be used when asked to "review PR #N", "review th
 version: 1.2.1
 metadata:
   mason-requires: '>=0.1,<0.2'
+  mason-task: 'Run the code review for pull request #{pr} in this project'
+  mason-inputs: 'pr'
 ---
 
 # Code review

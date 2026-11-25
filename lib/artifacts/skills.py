@@ -9,15 +9,32 @@ versions it works with in its frontmatter:
 (`metadata` is the open SKILL.md format's map of strings, so other agents ignore it.) mason
 refuses to start a run whose skill states a range this mason is outside, with the command that
 fixes it, rather than failing partway through the run.
+
+A skill is a workflow mason can run when it also declares the request that starts it, and what
+an unattended run needs (lists are comma-separated, since metadata values are strings):
+
+    metadata:
+      mason-task: 'Run the code review for pull request #{pr} in this project'
+      mason-inputs: 'pr'                      # what `mason run` must be given
+      mason-tools: 'Bash(make *), Bash(npm *)'  # beyond the base tools, for unattended runs
+      mason-env: 'SENTRY_AUTH_TOKEN'          # tokens it can't run without
+      mason-github: 'alerts, discussions'     # what the GitHub login must reach beyond pushing
+
+So the workflows are whatever workflow skills are installed: mason keeps no list of its own.
+`MASON_SKILLS_PATH` adds directories searched after the installed ones, such as a checkout's
+`skills/`.
 """
 
+import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import paths, runner, version
+from . import paths, version
 
+INPUTS = ('pr',)
+GITHUB = ('alerts', 'discussions')
 REQUIREMENT = re.compile(r'^(>=|<=|==|>|<)\s*(\d+(?:\.\d+)*)$')
 
 
@@ -25,16 +42,38 @@ class SkillError(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class Workflow:
+    """A workflow, as its skill declares it."""
+
+    # What to ask for, in the words the skill's description listens for. `{pr}` is the pull
+    # request.
+    task: str
+    # Tools an unattended run may use beyond the base set (`runner.BASE_TOOLS`).
+    tools: tuple[str, ...] = ()
+    # Whether the workflow acts on one pull request, given with --pr.
+    needs_pr: bool = False
+    # Environment variables it can't run without. `mason doctor` checks they are set, never
+    # what they hold.
+    env: tuple[str, ...] = ()
+    # What the GitHub login must reach besides pushing branches and opening issues and PRs,
+    # which every workflow does: 'alerts' (Dependabot alerts), 'discussions'.
+    github: tuple[str, ...] = ()
+
+
 def directories(env: Mapping[str, str] | None = None) -> list[Path]:
-    """Where skills are installed, mason's own place first (`mason skills install`), then the
-    global places (`--global`)."""
-    home = Path((env or {}).get('HOME') or Path.home())
+    """Where skills are found: mason's own place first (`mason skills install`), then the global
+    places (`--global`), then any in `MASON_SKILLS_PATH`."""
+    source = os.environ if env is None else env
+    home = Path(source.get('HOME') or Path.home())
     data = paths.data_home(env)
+    extra = [Path(p) for p in source.get('MASON_SKILLS_PATH', '').split(os.pathsep) if p]
     return [
         data / '.claude' / 'skills',
         data / '.agents' / 'skills',
         home / '.claude' / 'skills',
         home / '.agents' / 'skills',
+        *extra,
     ]
 
 
@@ -114,6 +153,8 @@ class Skill:
     path: Path
     version: str | None
     requires: str | None
+    # Set when the skill declares itself a workflow (`mason-task`).
+    workflow: Workflow | None = None
 
     def problem(self, engine: str) -> str | None:
         """Why this skill can't run with this mason, or None."""
@@ -139,13 +180,43 @@ def read(path: Path) -> Skill:
     except (OSError, SkillError) as exc:
         raise SkillError(f'{path}: {exc}') from exc
     metadata = data.get('metadata')
-    requires = metadata.get('mason-requires') if isinstance(metadata, dict) else None
+    metadata = metadata if isinstance(metadata, dict) else {}
     skill_version = data.get('version')
+    try:
+        workflow = _workflow(metadata)
+    except SkillError as exc:
+        raise SkillError(f'{path}: {exc}') from exc
     return Skill(
         name=str(data.get('name') or path.parent.name),
         path=path,
         version=skill_version if isinstance(skill_version, str) else None,
-        requires=requires,
+        requires=metadata.get('mason-requires'),
+        workflow=workflow,
+    )
+
+
+def _list(text: str | None) -> tuple[str, ...]:
+    return tuple(item.strip() for item in (text or '').split(',') if item.strip())
+
+
+def _workflow(metadata: Mapping[str, str]) -> Workflow | None:
+    task = metadata.get('mason-task', '').strip()
+    if not task:
+        return None
+    inputs = _list(metadata.get('mason-inputs'))
+    github = _list(metadata.get('mason-github'))
+    for name, values, known in (('mason-inputs', inputs, INPUTS), ('mason-github', github, GITHUB)):
+        unknown = [v for v in values if v not in known]
+        if unknown:
+            raise SkillError(f'{name}: unknown {", ".join(unknown)} (known: {", ".join(known)})')
+    if ('{pr}' in task) != ('pr' in inputs):
+        raise SkillError("mason-task names {pr} exactly when mason-inputs has 'pr'")
+    return Workflow(
+        task=task,
+        tools=_list(metadata.get('mason-tools')),
+        needs_pr='pr' in inputs,
+        env=_list(metadata.get('mason-env')),
+        github=github,
     )
 
 
@@ -153,11 +224,27 @@ def installed(env: Mapping[str, str] | None = None) -> list[Skill]:
     """Every installed copy of a workflow skill, in the order `directories` searches."""
     found = []
     for directory in directories(env):
-        for name in sorted(runner.WORKFLOWS):
-            path = directory / name / 'SKILL.md'
-            if path.is_file():
-                found.append(read(path))
+        for path in sorted(directory.glob('*/SKILL.md')):
+            try:
+                skill = read(path)
+            except SkillError:
+                # Other skills live beside mason's, in YAML this reader doesn't need to follow.
+                # Only a skill that declares itself a workflow must be readable.
+                if 'mason-task' in path.read_text(encoding='utf-8', errors='replace'):
+                    raise
+                continue
+            if skill.workflow is not None:
+                found.append(skill)
     return found
+
+
+def workflows(env: Mapping[str, str] | None = None) -> dict[str, Workflow]:
+    """name -> workflow, from the copy of each workflow skill a session loads first."""
+    found: dict[str, Workflow] = {}
+    for skill in installed(env):
+        if skill.workflow is not None:
+            found.setdefault(skill.name, skill.workflow)
+    return dict(sorted(found.items()))
 
 
 def find(workflow: str, env: Mapping[str, str] | None = None) -> Skill | None:

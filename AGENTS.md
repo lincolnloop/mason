@@ -23,6 +23,9 @@ install`) and the skills with `npx skills add -g` (`docs/packaging.md`), so:
   `../<name>/SKILL.md`, which is installed beside it.
 - **Nothing a developer keeps goes in a repository:** settings and run state live in their home
   directory (`lib/artifacts/paths.py`), never in a project or this checkout.
+- **A workflow is a skill that declares itself** with `mason-task` and the other `mason-*`
+  metadata (`lib/artifacts/skills.py`). mason keeps no list of workflows: adding one is adding
+  its skill.
 - **Skills state the mason versions they work with** (`metadata.mason-requires`). A skill that
   starts using a new command or field raises its lower bound in the same change.
 - **Every script has tests** beside it, covering malformed input as well as the happy path.

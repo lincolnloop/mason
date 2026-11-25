@@ -215,7 +215,7 @@ class CollectTests(Clean):
         )
 
     def test_a_broken_settings_file(self) -> None:
-        settings(REPO, '[workflows]\nenabled = ["nope"]\n')
+        settings(REPO, '[workflows]\nenabled = "all"\n')
         (item,) = inbox.collect(
             run_gh=FakeGh(), env=dict(os.environ, SENTRY_AUTH_TOKEN=''), now=NOW
         )

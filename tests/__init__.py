@@ -23,3 +23,5 @@ for variable, sub in (
     os.environ[variable] = str(HOME / sub)
 # Skills installed with --global live under HOME (~/.claude/skills), so HOME is the same directory.
 os.environ['HOME'] = str(HOME)
+# The workflows are whatever workflow skills are installed; in the tests, this checkout's.
+os.environ['MASON_SKILLS_PATH'] = str(ROOT / 'skills')

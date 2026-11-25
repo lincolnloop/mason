@@ -4,6 +4,9 @@ description: 'This skill should be used when asked to "fix the Sentry errors", "
 version: 1.0.1
 metadata:
   mason-requires: '>=0.1,<0.2'
+  mason-task: 'Run the Sentry errors workflow for this project'
+  mason-tools: 'Bash(make *), Bash(npm *)'
+  mason-env: 'SENTRY_AUTH_TOKEN'
 ---
 
 # Sentry errors

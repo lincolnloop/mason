@@ -10,7 +10,7 @@ import unittest
 from collections.abc import Sequence
 from pathlib import Path
 
-from artifacts import paths, project, projects, runner, workspace
+from artifacts import paths, project, projects, skills, workspace
 
 from . import ROOT
 
@@ -70,18 +70,18 @@ class FakeGh:
 
 class ChooseTests(unittest.TestCase):
     def test_everything_by_default(self) -> None:
-        self.assertEqual(projects.choose(''), sorted(runner.WORKFLOWS))
-        self.assertEqual(projects.choose(' all '), sorted(runner.WORKFLOWS))
+        self.assertEqual(projects.choose(''), sorted(skills.workflows()))
+        self.assertEqual(projects.choose(' all '), sorted(skills.workflows()))
 
     def test_names_and_numbers(self) -> None:
-        first = sorted(runner.WORKFLOWS)[0]
+        first = sorted(skills.workflows())[0]
         self.assertEqual(
             projects.choose(f'1, dependency-report {first}'), [first, 'dependency-report']
         )
         self.assertIn(f'  1. {first}', projects.menu())
 
     def test_unknown(self) -> None:
-        for text in ('nope', '0', str(len(runner.WORKFLOWS) + 1), 'all code-review'):
+        for text in ('nope', '0', str(len(skills.workflows()) + 1), 'all code-review'):
             with self.subTest(text=text), self.assertRaisesRegex(projects.ProjectError, 'known'):
                 projects.choose(text)
 
@@ -179,18 +179,17 @@ class EnabledSettingTests(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(paths.config_home(), ignore_errors=True)
 
-    def test_unknown_workflow(self) -> None:
-        errors = project.check({'workflows': {'enabled': ['code-review', 'deploy']}})
-        self.assertEqual(len(errors), 1)
-        self.assertTrue(errors[0].startswith("$.workflows.enabled[1]: is not a workflow: 'deploy'"))
+    def test_names_are_only_type_checked(self) -> None:
+        # An uninstalled workflow must not make the settings file unreadable.
+        self.assertEqual(project.check({'workflows': {'enabled': ['code-review', 'deploy']}}), [])
         self.assertIn('must be an array', project.check({'workflows': {'enabled': 'all'}})[0])
 
     def test_every_workflow_unless_the_settings_say(self) -> None:
-        self.assertEqual(project.enabled_workflows(REPO), sorted(runner.WORKFLOWS))
+        self.assertEqual(project.enabled_workflows(REPO), sorted(skills.workflows()))
         path = paths.settings(REPO)
         path.parent.mkdir(parents=True)
         path.write_text('version = 1\n[limits]\nopen_agent_prs = 2\n')
-        self.assertEqual(project.enabled_workflows(REPO), sorted(runner.WORKFLOWS))
+        self.assertEqual(project.enabled_workflows(REPO), sorted(skills.workflows()))
         path.write_text('version = 1\n[workflows]\nenabled = []\n')
         self.assertEqual(project.enabled_workflows(REPO), [])
 
@@ -331,7 +330,7 @@ class CliTests(unittest.TestCase):
         shutil.rmtree(paths.clone(REPO))  # or the second run fetches it from GitHub
         result = self.mason('project', 'add', REPO, stdin='\ny\n')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(project.enabled_workflows(REPO), sorted(runner.WORKFLOWS))
+        self.assertEqual(project.enabled_workflows(REPO), sorted(skills.workflows()))
 
     def test_list_archive_and_remove(self) -> None:
         self.mason('project', 'add', REPO, '--workflow', 'code-review', '--yes')

@@ -4,6 +4,8 @@ description: 'This skill should be used when asked to "run the dependency assess
 version: 1.0.0
 metadata:
   mason-requires: '>=0.1,<0.2'
+  mason-task: 'Run the dependency assessment for this project'
+  mason-github: 'alerts'
 ---
 
 # Dependency assessment

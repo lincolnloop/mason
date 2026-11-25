@@ -4,6 +4,9 @@ description: 'This skill should be used when asked to "run the dependency upgrad
 version: 3.0.0
 metadata:
   mason-requires: '>=0.1,<0.2'
+  mason-task: 'Run the dependency upgrades for this project'
+  mason-tools: 'Bash(make *), Bash(npm *), Bash(pip-compile *)'
+  mason-github: 'alerts'
 ---
 
 # Dependency upgrades

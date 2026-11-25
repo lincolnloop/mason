@@ -157,7 +157,8 @@ class CliTests(unittest.TestCase):
             text=True,
             check=False,
         )
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('nope is not an installed workflow', result.stderr)
 
 
 if __name__ == '__main__':

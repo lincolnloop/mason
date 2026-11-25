@@ -4,6 +4,9 @@ description: 'This skill should be used when asked to "run the Sentry retrospect
 version: 1.0.1
 metadata:
   mason-requires: '>=0.1,<0.2'
+  mason-task: 'Run the Sentry retrospective for this project'
+  mason-tools: 'Bash(uv run --locked python -m unittest *), Bash(ruff *)'
+  mason-env: 'SENTRY_AUTH_TOKEN'
 ---
 
 # Sentry retrospective

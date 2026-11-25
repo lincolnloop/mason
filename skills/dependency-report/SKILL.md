@@ -4,6 +4,8 @@ description: 'This skill should be used when asked to "run the dependency report
 version: 1.3.0
 metadata:
   mason-requires: '>=0.1,<0.2'
+  mason-task: 'Run the dependency report for this project'
+  mason-github: 'alerts, discussions'
 ---
 
 # Dependency report

@@ -93,8 +93,8 @@ prose. Unattended runs also record how they ended beside their log, so failures 
 A project chooses its workflows, and new ones are added without changing the engine.
 `docs/workflows.md` §3 to §7 (plan steps 1 to 5).
 
-- Each workflow declared in its skill's frontmatter (`metadata.mason`), replacing
-  `runner.WORKFLOWS`.
+- Each workflow declared in its skill's frontmatter (`mason-task` and the other `mason-*`
+  metadata), replacing `runner.WORKFLOWS` (built).
 - A workflow mapped to a skill from any source; a per-run skills directory; the prompt names the
   skill's file.
 - Workflow settings declared by the skill, replacing its entry in `project.SECTIONS`.

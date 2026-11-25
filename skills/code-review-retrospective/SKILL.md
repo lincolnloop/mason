@@ -4,6 +4,8 @@ description: 'This skill should be used when asked to "run the code review retro
 version: 1.1.1
 metadata:
   mason-requires: '>=0.1,<0.2'
+  mason-task: 'Run the code review retrospective for this project'
+  mason-tools: 'Bash(uv run --locked python -m unittest *), Bash(ruff *)'
 ---
 
 # Code review retrospective

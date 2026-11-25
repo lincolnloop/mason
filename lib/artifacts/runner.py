@@ -19,9 +19,10 @@ give it no more than reading alerts, pushing branches and opening pull requests.
 import json
 import os
 import subprocess
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from . import skills
 
 # Tools every workflow needs: reading and editing files, git and gh, this repo's scripts, and
 # the shell basics its steps use.
@@ -68,72 +69,16 @@ DENIED_TOOLS = (
 )
 
 
-@dataclass(frozen=True)
-class Workflow:
-    # What to ask for, in the words the skill's description listens for. `{pr}` is the pull request.
-    task: str
-    tools: tuple[str, ...]
-    # Whether the workflow acts on one pull request, given with --pr.
-    needs_pr: bool = False
-    # Environment variables the workflow can't run without. `artifact doctor` checks they are
-    # set, never what they hold.
-    env: tuple[str, ...] = ()
-    # What the GitHub login must reach besides pushing branches and opening issues and PRs, which
-    # every workflow does: 'alerts' (Dependabot alerts), 'discussions' (posting in Discussions).
-    github: tuple[str, ...] = ()
-
-
-# mason's own checks, run in a clone of it (`mason source`) before a retrospective proposes a
-# change to its skills.
-MASON_CHECKS = ('Bash(uv run --locked python -m unittest *)', 'Bash(ruff *)')
-
-
-WORKFLOWS = {
-    # Reads alerts, manifests, issues and PRs, and writes one issue: no build or test tools.
-    'dependency-assessment': Workflow(
-        task='Run the dependency assessment for this project',
-        tools=(),
-        github=('alerts',),
-    ),
-    'dependency-upgrades': Workflow(
-        task='Run the dependency upgrades for this project',
-        # pip_compile and the build commands, as the project configures them.
-        tools=('Bash(make *)', 'Bash(npm *)', 'Bash(pip-compile *)'),
-        github=('alerts',),
-    ),
-    'dependency-retrospective': Workflow(
-        task='Run the dependency retrospective for this project',
-        tools=MASON_CHECKS,
-        github=('alerts',),
-    ),
-    # Reads alerts and issues and posts one discussion, all through mason and gh.
-    'dependency-report': Workflow(
-        task='Run the dependency report for this project',
-        tools=(),
-        github=('alerts', 'discussions'),
-    ),
-    # A review reads someone else's code and never runs it: no build, test or package tools.
-    'code-review': Workflow(
-        task='Run the code review for pull request #{pr} in this project',
-        tools=(),
-        needs_pr=True,
-    ),
-    'sentry-errors': Workflow(
-        task='Run the Sentry errors workflow for this project',
-        # The project's tests and builds, as for an upgrade. Sentry is read through mason.
-        tools=('Bash(make *)', 'Bash(npm *)'),
-        env=('SENTRY_AUTH_TOKEN',),
-    ),
-    'sentry-retrospective': Workflow(
-        task='Run the Sentry retrospective for this project',
-        tools=MASON_CHECKS,
-        env=('SENTRY_AUTH_TOKEN',),
-    ),
-    'code-review-retrospective': Workflow(
-        task='Run the code review retrospective for this project',
-        tools=MASON_CHECKS,
-    ),
-}
+def declared(name: str) -> skills.Workflow:
+    """The installed workflow called `name`, as its skill declares it."""
+    found = skills.workflows()
+    if name not in found:
+        installed = ', '.join(found) or 'none'
+        raise ValueError(
+            f'{name} is not an installed workflow (installed: {installed}); '
+            "`mason skills install <org>/mason@<tag>` installs mason's"
+        )
+    return found[name]
 
 
 def prompt(
@@ -141,7 +86,7 @@ def prompt(
 ) -> str:
     """The request the session starts with: the workflow's task, then anything the person added
     (a month, a period, a scope), marked unattended when nobody is watching."""
-    spec = WORKFLOWS[workflow]
+    spec = declared(workflow)
     if spec.needs_pr and pr is None:
         raise ValueError(f'{workflow} acts on one pull request: give --pr')
     text = spec.task.format(pr=pr)
@@ -184,7 +129,7 @@ def command(
     request: str = '',
 ) -> list[str]:
     """Claude Code headless, for an unattended run."""
-    spec = WORKFLOWS[workflow]
+    spec = declared(workflow)
     rules = RULES.format(project=project.resolve(), state=state)
     # The session writes only to the project's state directory, where its run files go. mason is
     # allowed as the installed command, never `python <any file>`: a project's (or a pull

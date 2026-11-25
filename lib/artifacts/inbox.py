@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import paths, project, projects, runner, skills
+from . import paths, project, projects, skills
 
 # Most urgent first: something is broken, a PR can't merge, a person's decision is waiting, a
 # PR is waiting for review, an issue has had no response.
@@ -213,8 +213,14 @@ def local_items(repo: str, workflows: Sequence[str], env: Mapping[str, str]) -> 
     found = []
     kept = token_file(env)
     problems: dict[str, list[str]] = {}
+    declared = skills.workflows(env)
     for name in workflows:
-        missing = [t for t in runner.WORKFLOWS[name].env if not env.get(t) and t not in kept]
+        if name not in declared:
+            found.append(
+                Item(repo, BROKEN, f'{name} is enabled but not installed', 'mason skills list')
+            )
+            continue
+        missing = [t for t in declared[name].env if not env.get(t) and t not in kept]
         if missing:
             found.append(
                 Item(repo, BROKEN, f'{name} needs {", ".join(missing)}', '~/.config/mason/env')

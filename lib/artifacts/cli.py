@@ -346,7 +346,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     cmd.add_argument(
         '--workflow',
-        choices=sorted(runner.WORKFLOWS),
         help='also check the tokens this workflow needs',
     )
     cmd.add_argument(
@@ -357,7 +356,7 @@ def main(argv: list[str] | None = None) -> int:
         'run',
         help='start a workflow in an agent session: interactive, or headless with --unattended',
     )
-    cmd.add_argument('workflow', choices=sorted(runner.WORKFLOWS))
+    cmd.add_argument('workflow', help='an installed workflow (`mason doctor` lists them)')
     where = cmd.add_mutually_exclusive_group()
     where.add_argument(
         '--repo', help="owner/name: run in mason's own clone of it, made or fetched first"
@@ -418,7 +417,6 @@ def main(argv: list[str] | None = None) -> int:
         '--workflow',
         action='append',
         default=[],
-        choices=sorted(runner.WORKFLOWS),
         help='a workflow to enable; repeatable (default: ask, or every workflow with --yes)',
     )
     sub.add_argument('--yes', action='store_true', help='ask nothing')
@@ -1034,7 +1032,10 @@ def _config(args: argparse.Namespace) -> str:
 
 
 def _doctor(args: argparse.Namespace) -> str:
-    tokens = runner.WORKFLOWS[args.workflow].env if args.workflow else ()
+    try:
+        tokens = runner.declared(args.workflow).env if args.workflow else ()
+    except ValueError as exc:
+        raise Refused(str(exc)) from exc
     checks = doctor.run_checks(tokens, dict(os.environ), args.unattended)
     try:
         found = skills.installed()
@@ -1194,7 +1195,7 @@ def _project_add(args: argparse.Namespace) -> str:
         if not workflows and not args.yes:
             print(f'Workflows for {args.repo}:\n{projects.menu()}', file=sys.stderr)
             workflows = projects.choose(_ask('Enable which (numbers or names; Enter for all)? '))
-        plan = projects.plan(args.repo, workflows or sorted(runner.WORKFLOWS))
+        plan = projects.plan(args.repo, workflows or sorted(skills.workflows()))
         print(plan.describe(), file=sys.stderr)
         if args.dry_run:
             return 'Dry run: nothing written.\n'

@@ -45,46 +45,60 @@ So:
 
 ## 3. Declaring a workflow
 
-Each workflow skill declares itself under `metadata.mason` in its frontmatter. `metadata` is part
-of the open SKILL.md format, so other agents ignore it and the skill stays agent-neutral. It
-absorbs the `requires:` block planned in `packaging.md` §4.2.
+*Built in 0.2 (plan step 1), except settings (step 3).*
+
+Each workflow skill declares itself in its frontmatter's `metadata`, the open SKILL.md format's
+map of strings, so other agents ignore it and the skill stays agent-neutral. Since the values
+are strings, a list is comma-separated:
 
 ```yaml
 ---
 name: sentry-errors
 description: 'This skill should be used when asked to "fix the Sentry errors", ...'
-version: 1.1.0
+version: 1.0.1
 metadata:
-  mason:
-    requires:
-      mason: '>=0.7,<0.8'
-      schemas: [finding/1, change/1, run/2]
-    task: Run the Sentry errors workflow for this project
-    inputs:
-      pr: false
-    tools: ['Bash(make *)', 'Bash(npm *)']
-    env: [SENTRY_AUTH_TOKEN]
-    settings:
-      sentry_org: {type: str, required: true}
-      sentry_project: {type: str, required: true}
-      environments: {type: list, default: [production]}
-      period_days: {type: int, default: 14}
-      verify: {type: list}
+  mason-requires: '>=0.1,<0.2'
+  mason-task: 'Run the Sentry errors workflow for this project'
+  mason-tools: 'Bash(make *), Bash(npm *)'
+  mason-env: 'SENTRY_AUTH_TOKEN'
 ---
 ```
 
-- `task` and `inputs` replace `Workflow.task` and `needs_pr`. Inputs are named (`pr`, later
-  others) so `mason run` can check them before the session starts.
-- `tools` and `env` replace `Workflow.tools` and `Workflow.env`. The base tools and
-  `DENIED_TOOLS` stay in the engine and apply to every workflow.
-- `settings` replaces that workflow's entry in `project.SECTIONS`. The shared sections (`repo`,
-  `limits`, `verify`) and the detection in `detect.py` stay in the engine. A skill whose settings
-  can be detected names the detector (`detect: pip_requirements`) rather than shipping code.
-- A skill without `metadata.mason` is a knowledge skill (`packaging.md` §4.1). It can be loaded by
-  a workflow but can't be run as one.
+- `mason-task` makes a skill a workflow: the request `mason run` starts the session with. A
+  skill without it is a knowledge skill (`packaging.md` §4.1): it can be loaded by a workflow
+  but can't be run as one.
+- `mason-inputs` names what `mason run` must be given (`pr` for now), checked before the session
+  starts. A task names `{pr}` exactly when its inputs include `pr`.
+- `mason-tools` and `mason-env` are what an unattended run may use beyond the base tools, and
+  the tokens it can't run without. The base tools and `DENIED_TOOLS` stay in the engine and
+  apply to every workflow.
+- `mason-github` is what the GitHub login must reach beyond pushing (`alerts`, `discussions`),
+  which `mason project add` checks.
+- `mason-requires` is the range of mason versions the skill works with (`packaging.md` §4.2).
 
-`mason workflows` lists the workflows found in the installed skills, their source (from the
-`npx skills` lock) and whether each is compatible with this engine.
+The workflows are whatever workflow skills are installed: mason keeps no list of its own. The
+first copy of a skill in the order a session loads them wins: mason's own skills directory, then
+the global ones, then `MASON_SKILLS_PATH` (a checkout's `skills/`, for the tests).
+
+**Settings (step 3)** don't fit a map of strings. They go in a file beside the skill,
+`skills/<name>/settings.toml`, which installs with it:
+
+```toml
+[sentry_org]
+type = 'str'
+required = true
+
+[environments]
+type = 'list'
+default = ['production']
+```
+
+That replaces the workflow's entry in `project.SECTIONS`. The shared sections (`repo`, `limits`,
+`verify`) and the detection in `detect.py` stay in the engine. A skill whose settings can be
+detected names the detector (`detect = 'pip_requirements'`) rather than shipping code.
+
+`mason doctor` lists the installed workflow skills and whether each works with this engine;
+their source (from the `npx skills` lock) is still to come.
 
 ## 4. Choosing workflows per project
 
@@ -151,7 +165,7 @@ Interactive runs are unchanged: the person approves actions under their own perm
 
 Most new workflows need only `gh` and commands that aren't tied to one workflow: `config`, `lock`,
 the run record, `validate`, `render-change`, `embed`/`extract`, `annotate-diff`. Such a workflow
-is just a SKILL.md with a `metadata.mason` block, installed from any source:
+is just a SKILL.md with `mason-task` in its metadata, installed from any source:
 
 ```sh
 mason skills install acme/team-skills@v1 --skill billing-reconcile
@@ -162,7 +176,7 @@ Then enable it in the project's settings and `mason run billing-reconcile --repo
 ### 6.2 Project-specific workflows
 
 A skill committed in the project's own `.claude/skills/` (or `.agents/skills/`) is already loaded,
-because `mason run` starts the session in the project's clone. With a `metadata.mason` block,
+because `mason run` starts the session in the project's clone. With `mason-task` in its metadata,
 mason can run it as a workflow too. Committing it is the team's choice, not mason's, so principle
 1 of `packaging.md` still holds.
 
@@ -508,7 +522,7 @@ Each step can ship by itself. `docs/roadmap.md` places them in releases: steps 1
 
 | Step | Change | Behaviour seen by a developer |
 |---|---|---|
-| 1 | `metadata.mason` in mason's skills; the engine reads it; `runner.WORKFLOWS` removed | none |
+| 1 | `mason-*` metadata in mason's skills; the engine reads it; `runner.WORKFLOWS` removed (built) | none |
 | 2 | `[workflows] enabled` and `skill`; the per-run skills directory; the prompt names the skill's file | a project runs only what it enables |
 | 3 | settings declared by skills; workflow entries removed from `project.SECTIONS` | none |
 | 4 | tool requests and grants; workflows from other sources and from the project | new workflows without engine changes |
