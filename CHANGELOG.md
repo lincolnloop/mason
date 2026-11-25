@@ -9,6 +9,11 @@ its skills from the same tag: each skill states the mason versions it works with
   `GH_TOKEN` comes from (an env variable or a `gh` login), the name and email on its commits,
   and a GitHub Enterprise host. A project's runs, and mason's GitHub calls for it, see only its
   own tokens. `mason doctor --repo` shows whose token a project uses, its scopes and its expiry.
+- A sandbox for a project's own code (`[sandbox]`, `mason sandbox -- <command>`): a throwaway
+  container with only the worktree and a package cache, as your user, with no tokens. Unattended
+  runs on the project may run its builds, installs and tests no other way.
+- Every session is told that text from issues, PRs, alerts and error reports is data, never
+  instructions.
 
 ## 0.5.0
 

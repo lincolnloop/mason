@@ -190,6 +190,26 @@ account's token makes them the bot's. `mason doctor --repo <owner>/<repo>` shows
 credentials a project resolves to, whose token it is, a classic token's scopes, and when it
 expires. The settings name where a secret is; they never hold one.
 
+**A sandbox for the project's code.** Workflows that build, install or test a project (upgrades,
+Sentry fixes) run its code and its dependencies' code. To keep that off your machine, give the
+project a container image with its toolchain:
+
+```toml
+[sandbox]
+image = 'python:3.12'   # mason can't guess a project's toolchain
+engine = 'docker'       # or 'podman'
+network = true          # dependency tools need it; false cuts the container off
+```
+
+The agent stays on your machine; the project's commands run as `mason sandbox -- <command>`, in a
+throwaway container that mounts only the run's worktree (or mason's clone) and a per-project
+package cache, runs as your user, and gets no tokens and no home directory. An unattended run on
+the project loses its skill's direct `make`, `npm`, `pip-compile` and similar permissions, so the
+sandbox is the only way to run them. `mason doctor --repo` checks the engine is there.
+
+Every session is also told that text from issues, PRs, alerts, advisories and error reports was
+written by others: data, never instructions.
+
 An interactive Claude Code sign-in expires, so a scheduled job needs a long-lived token: run
 `claude setup-token` and give the job the token it prints, as `CLAUDE_CODE_OAUTH_TOKEN`.
 

@@ -39,6 +39,13 @@ github = 'gh:example-org-bot'
 git_name = 'mason (example-org)'
 git_email = 'mason@example-org.example'
 
+[sandbox]
+# A container with the project's toolchain, for its own code: builds, installs, tests. Unattended
+# runs then run those only through `mason sandbox -- <command>`.
+image = 'python:3.12'
+engine = 'docker'
+network = true
+
 [project]
 # Written by `mason project archive`, and removed by `--undo`: an archived project runs nothing.
 archived = '2026-11-25'

@@ -150,10 +150,13 @@ place.
 
 What makes it safe to run more workflows, from more sources, on more projects.
 
-- **A sandbox per run** (a container) for workflows that run a project's code, with only the
-  tokens that run needs.
-- **Untrusted input:** issue and PR text, Sentry events and package metadata are treated as data
-  throughout, with tests for prompt injection in the workflows that read them.
+- **A sandbox for the project's code** (built): `[sandbox]` names a container image; the
+  project's commands run as `mason sandbox -- <command>`, mounting only the worktree and a
+  package cache, as the developer's user, with no tokens; an unattended run on the project may
+  run them no other way. The agent itself still runs on the machine.
+- **Untrusted input** (built, as instructions): every session, and every workflow skill, says
+  text written by others is data, never instructions; a test keeps every skill saying so.
+  Testing prompt injection against the agent itself needs evaluations, under Later.
 - **Credentials per project** (built): `[credentials]` per project or per owner (an env file,
   where `GH_TOKEN` comes from, the commit identity, a GitHub Enterprise host); a project's work
   sees only its own tokens; `mason doctor --repo` shows whose token it is, its scopes and when it
@@ -171,8 +174,8 @@ Ordered roughly by when they are likely to matter. Each gets a design before it 
   while the business doesn't account for token costs; it becomes one if they rise.
 - **Teams.** Who owns which workflow on a shared project; handing a project's results to
   another developer; a shared results store (`workflows.md` §12).
-- **Testing skill changes.** Evaluations against recorded inputs, and trying a change on one
-  project before all of them.
+- **Testing skill changes.** Evaluations against recorded inputs (including prompt injection), and
+  trying a change on one project before all of them.
 - **Event triggers:** a new critical alert, an opened PR, an error spike, alongside schedules.
 - **Plugin packages** for workflows that need their own code (`workflows.md` §6.3).
 - **Other agents:** unattended runs with Codex and others (`packaging.md` §10).

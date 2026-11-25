@@ -43,6 +43,7 @@ from . import (
     run,
     rundue,
     runner,
+    sandbox,
     schedules,
     sentry,
     sentry_outcomes,
@@ -604,6 +605,13 @@ def main(argv: list[str] | None = None) -> int:
     how.add_argument('--cron', action='store_true', help='print the crontab line to add')
     sub.add_argument('--every', type=int, default=15, help='minutes between starts (default 15)')
     cmd.add_argument('--repo', action='append', default=[], help='owner/name; repeatable')
+
+    cmd = commands.add_parser(
+        'sandbox', help="run a project's own code in its container: mason sandbox -- <command>"
+    )
+    cmd.add_argument('--repo', help='owner/name (default: the checkout in the current directory)')
+    cmd.add_argument('--dry-run', action='store_true', help='print the container command')
+    cmd.add_argument('argv', nargs=argparse.REMAINDER, help='-- then the command')
 
     cmd = commands.add_parser('lock', help='take or release the one-run-at-a-time lock')
     cmd.add_argument('action', choices=('acquire', 'release'))
@@ -1240,6 +1248,23 @@ def _doctor(args: argparse.Namespace) -> str:
                 doctor.Check('github token', status, detail)
                 for status, detail in credentials.token_checks(environ)
             ]
+        try:
+            box = project.sandbox_for(args.repo)
+        except project.ConfigError as exc:
+            checks.append(doctor.Check('sandbox', doctor.FAIL, str(exc)))
+        else:
+            if box is None:
+                checks.append(
+                    doctor.Check(
+                        'sandbox', doctor.WARN, "none: the project's code runs on this machine"
+                    )
+                )
+            elif shutil.which(box.engine) is None:
+                checks.append(
+                    doctor.Check('sandbox', doctor.FAIL, f'{box.engine} is not installed')
+                )
+            else:
+                checks.append(doctor.Check('sandbox', doctor.OK, f'{box.engine}, {box.image}'))
     report = doctor.render(checks)
     if doctor.failed(checks):
         raise Refused(report.rstrip('\n'))
@@ -1340,16 +1365,20 @@ def _run(args: argparse.Namespace) -> str:
             skills.stage(args.workflow, session, mapping)
         except skills.SkillError as exc:
             raise Refused(f'{exc}\n{args.workflow} not started') from exc
+    try:
+        sandboxed = project.sandbox_for(repo) is not None
+    except project.ConfigError as exc:
+        raise Refused(str(exc)) from exc
     if args.unattended:
         command = runner.command(
             directory, state, args.workflow, tuple(args.allow), args.claude, args.pr, session,
-            args.request, spec, skill_file,
+            args.request, spec, skill_file, sandboxed,
         )  # fmt: skip
         env = runner.environment(args.trigger)
     else:
         command = runner.interactive_command(
             directory, state, args.workflow, session, args.claude, args.pr, args.request, spec,
-            skill_file,
+            skill_file, sandboxed,
         )  # fmt: skip
         env = dict(os.environ)
     try:
@@ -1768,6 +1797,35 @@ def _install_heartbeat(args: argparse.Namespace) -> str:
     )
 
 
+def _sandbox(args: argparse.Namespace) -> str:
+    argv = args.argv[1:] if args.argv[:1] == ['--'] else args.argv
+    workdir = Path.cwd()
+    repo = args.repo or detect.repo_name(workdir)
+    if repo is None:
+        raise Refused('give --repo, or run it in a checkout of the project')
+    try:
+        found = project.sandbox_for(repo)
+    except (project.ConfigError, ValueError) as exc:
+        raise Refused(str(exc)) from exc
+    if found is None:
+        raise Refused(f'{repo} has no [sandbox]: set its image in {paths.settings(repo)}')
+    if not sandbox.inside(workdir, repo):
+        raise Refused(
+            f"{workdir} is not in mason's clone of {repo} or one of its runs: a sandbox mounts "
+            'only those'
+        )
+    try:
+        if args.dry_run:
+            cache = paths.project_state(repo) / 'sandbox-cache'
+            return shlex.join(sandbox.command(found, workdir, cache, argv)) + '\n'
+        status = sandbox.run(found, repo, workdir, argv)
+    except sandbox.SandboxError as exc:
+        raise Refused(str(exc)) from exc
+    if status != 0:
+        raise Refused(f'the command exited with status {status}')
+    return ''
+
+
 def _lock(args: argparse.Namespace) -> str:
     try:
         repo = project.load(args.project)['repo']['name']
@@ -1803,6 +1861,7 @@ COMMANDS = {
     'overdue': _overdue,
     'history': _history,
     'run-due': _run_due,
+    'sandbox': _sandbox,
     'skip': _skip,
     'schedule': _schedule,
     'run': _run,

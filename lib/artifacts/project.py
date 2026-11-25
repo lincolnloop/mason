@@ -26,7 +26,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from . import credentials, detect, paths, schedules, skills
+from . import credentials, detect, paths, sandbox, schedules, skills
 from ._check import REPO_PATTERN, Checker
 
 # Where the file used to be kept: in the project. A `mason.toml` at a project's root is still
@@ -247,7 +247,7 @@ def resolve(project: Path, env: Mapping[str, str] | None = None) -> Resolved:
                 resolved.sources[(section, key)] = 'default'
         if values or section in file_config:
             resolved.config[section] = values
-    known = {'skills', 'grants', 'schedule', 'credentials'}
+    known = {'skills', 'grants', 'schedule', 'credentials', 'sandbox'}
     for section in sorted(set(file_config) - set(sections) - known):
         resolved.notes.append(f'[{section}] is for no installed workflow, so it is not read')
     for path in detect.unsupported_lockfiles(detect.tracked_files(project)):
@@ -312,6 +312,10 @@ def check(
                         checker.error(f'{where}.since', 'must be a date, e.g. 2026-11-25')
             else:
                 _check_schedule(checker, value, where)
+    # The container the project's own code runs in (sandbox.py).
+    if 'sandbox' in config:
+        for problem in sandbox.check(config['sandbox']):
+            checker.error('$.sandbox', problem)
     # Where the project's credentials come from (credentials.py).
     if 'credentials' in config:
         for problem in credentials.check(config['credentials']):
@@ -522,3 +526,8 @@ def added(repo: str, env: Mapping[str, str] | None = None) -> date | None:
     """When the project was added (`mason project add`): its schedules count from then."""
     value = settings(repo, env).get('project', {}).get('added')
     return value if isinstance(value, date) else None
+
+
+def sandbox_for(repo: str, env: Mapping[str, str] | None = None) -> sandbox.Sandbox | None:
+    """The container the project's own code runs in, or None when it has none (`[sandbox]`)."""
+    return sandbox.configured(settings(repo, env))

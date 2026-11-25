@@ -57,6 +57,7 @@ Style: single quotes, 100-character lines, explicit type hints, ruff for lint an
 - Schedules: `uv run mason status|due|overdue [--repo <owner>/<repo>]`, `mason history <repo>
   <workflow>`, `mason skip <repo> <workflow> <period> --reason <why>`, `mason schedule set <repo>
   <workflow> '<schedule>'`, `mason run-due [--dry-run]`, `mason schedule install [--systemd|--cron]`
+- A project's own code, in its container: `uv run mason sandbox [--dry-run] -- <command>`
 - What needs the developer: `uv run mason inbox [--repo <owner>/<repo>] [--count] [--json]`;
   `mason approve|dismiss <run>#<n> --repo <owner>/<repo>` for a deferred action
 - Everything else: `uv run mason --help`
