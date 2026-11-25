@@ -1,0 +1,12 @@
+# This workflow's settings, in [dependency-assessment] of a project's settings file (see
+# ../dependency-upgrades/settings.toml for the format).
+
+# Where the result is published from mason's copy (`mason publish`): `issue` (in the
+# project, with the `automation` label), `discussion:<category>`, or `file:<directory>`.
+# Empty: kept, not published. dependency-upgrades reads the month's assessment from its issue,
+# so keep `issue` in the list while that workflow runs on the project.
+[publish]
+type = 'list'
+required = true
+default = ['issue']
+

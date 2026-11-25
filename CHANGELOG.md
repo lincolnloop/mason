@@ -10,6 +10,9 @@ its skills from the same tag: each skill states the mason versions it works with
   `mason results` lists them, and marks copies older than the master.
 - `dependency-report` saves its report first, then publishes it where its `publish` setting says
   (by default a discussion, as before). It needs this mason: reinstall the skills.
+- dependency-assessment, the three retrospectives and Sentry triage save their reports first too,
+  and publish to an `issue` by default, as before. The month's assessment issue is updated in
+  place: its result is saved with `--comment`, what changed. These skills need this mason.
 - Notes: `mason note save`, `list`, `show` and `status` keep analyses per project, out of the
   project's history, with a status (draft, proposed, adopted, dropped, superseded). The `notes`
   skill tells an agent how to use them. Notes publish like any result.

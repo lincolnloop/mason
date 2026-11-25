@@ -30,9 +30,10 @@ from . import discussions, paths, validate
 
 KEY = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
 META, PUBLISHED, RUN, PREVIOUS = 'meta.json', 'published.json', 'run.json', 'previous'
-# Targets: `discussion[:<category>]` (the workflow's `category` setting when none is given), and
-# `file:<directory>`.
-TARGETS = ('discussion', 'file')
+# Targets: `discussion[:<category>]` (the workflow's `category` setting when none is given),
+# `issue` (in the project, with the `automation` label), and `file:<directory>`.
+TARGETS = ('discussion', 'issue', 'file')
+LABEL = 'automation'
 
 Gh = Callable[..., str]
 
@@ -75,6 +76,7 @@ def save(
     title: str,
     env: Mapping[str, str] | None = None,
     now: datetime | None = None,
+    comment: Path | None = None,
 ) -> Path:
     """Save a run's output as the result for `key`, keeping any earlier version. Every JSON file
     that is an artifact is validated first; nothing is saved if one is invalid."""
@@ -87,6 +89,8 @@ def save(
         raise ResultError('--title is empty')
     if body not in files:
         files = [*files, body]
+    if comment is not None and comment not in files:
+        files = [*files, comment]
     for path in files:
         if not path.is_file():
             raise ResultError(f'{path}: does not exist')
@@ -120,6 +124,7 @@ def save(
             'key': key,
             'title': title.strip(),
             'body': body.name,
+            **({'comment': comment.name} if comment is not None else {}),
             'saved_at': _now(now),
             'run': record['id'],
         },
@@ -189,7 +194,9 @@ def publish(
     """Make a copy of the result at `target`, and record it. Returns where it went."""
     kind, _, argument = target.partition(':')
     if kind not in TARGETS:
-        raise ResultError(f'{target}: a target is discussion[:<category>] or file:<directory>')
+        raise ResultError(
+            f'{target}: a target is discussion[:<category>], issue or file:<directory>'
+        )
     body = (result.path / result.meta['body']).read_text(encoding='utf-8')
     if kind == 'discussion':
         category = argument or category
@@ -199,6 +206,8 @@ def publish(
             where = discussions.post(gh, result.repo, category, result.meta['title'], body)
         except discussions.DiscussionError as exc:
             raise ResultError(str(exc)) from exc
+    elif kind == 'issue':
+        where = _issue(result, gh, body)
     else:
         if not argument:
             raise ResultError('file: name the directory (file:<directory>)')
@@ -209,13 +218,56 @@ def publish(
         copy.write_text(body, encoding='utf-8')
         where = str(copy)
     result.published = [
-        p for p in result.published if not (p['target'] == target and kind == 'file')
+        p for p in result.published if not (p['target'] == target and kind in ('file', 'issue'))
     ]
     result.published.append(
         {'target': target, 'where': where, 'at': _now(now), 'version': result.meta['saved_at']}
     )
     write_json(result.path / PUBLISHED, result.published)
     return where
+
+
+def _issue(result: Result, gh: Gh, body: str) -> str:
+    """Open the result's issue, or, when one is already open under its title and the result was
+    saved with a comment (what changed since the last version), replace its body and add the
+    comment. The issue is found on GitHub, not in this machine's records, so runs on two machines
+    keep one issue."""
+    title = result.meta['title']
+    found = json.loads(
+        gh(
+            'issue',
+            'list',
+            '--repo',
+            result.repo,
+            '--label',
+            LABEL,
+            '--state',
+            'open',
+            '--search',
+            f'in:title "{title}"',
+            '--json',
+            'number,url,title',
+        )  # fmt: skip
+        or '[]'
+    )
+    existing = next((i for i in found if i.get('title') == title), None)
+    folder = result.path
+    if existing is None:
+        url = gh(
+            'issue', 'create', '--repo', result.repo, '--title', title, '--label', LABEL,
+            '--body-file', str(folder / result.meta['body']),
+        ).strip()  # fmt: skip
+        if 'comment' in result.meta:
+            gh('issue', 'comment', url, '--body-file', str(folder / result.meta['comment']))
+        return url
+    if 'comment' not in result.meta:
+        raise ResultError(
+            f'{existing["url"]} is already "{title}". A published issue is not replaced: post a '
+            'correction as a comment on it.'
+        )
+    gh('issue', 'edit', existing['url'], '--body-file', str(folder / result.meta['body']))
+    gh('issue', 'comment', existing['url'], '--body-file', str(folder / result.meta['comment']))
+    return existing['url']
 
 
 def remove(result: Result) -> str:

@@ -1,9 +1,9 @@
 ---
 name: code-review-retrospective
 description: 'This skill should be used when asked to "run the code review retrospective", "how are the automated reviews doing", "what do people do with the review findings" or "improve the code review skill" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over code-review: a script collects what happened to every finding the reviews posted over a period (whether the flagged lines changed, what a follow-up review concluded, what people replied), and this skill judges which findings people found right, wrong or not worth it. It opens one report issue, proposes changes to the review skill as a PR when a pattern holds across PRs, and proposes project rules where the project disagrees with the review.'
-version: 1.1.1
+version: 1.2.0
 metadata:
-  mason-requires: '>=0.2,<0.4'
+  mason-requires: '>=0.3,<0.4'
   mason-task: 'Run the code review retrospective for this project'
   mason-tools: 'Bash(uv run --locked python -m unittest *), Bash(ruff *)'
 ---
@@ -40,6 +40,7 @@ report: `mason defer <RUN> --action '<what to do>' --reason '<why it needs a per
 
 | Action | Level |
 |---|---|
+| Keep the result as mason's copy (`mason save-result`) | Unattended |
 | Collect outcomes; read PRs, reviews and comments | Unattended |
 | Open the report issue | Unattended: the report is the point |
 | Open a PR to this repository proposing a review-skill change | Unattended: a person merges it |
@@ -135,9 +136,15 @@ Validate each with `mason validate`. Then:
 ```sh
 mason render-review-retrospective $RUN/outcomes.json --run $RUN/run.json \
   --findings $RUN/findings/*.json -o $RUN/report.md
-gh issue create --repo <repo.name> --label automation \
-  --title 'Code review retrospective: <period.since date> to <period.until date>' --body-file $RUN/report.md
+mason save-result $RUN/outcomes.json $RUN/findings/*.json --run $RUN/run.json \
+  --key <period.until date> --title 'Code review retrospective: <period.since date> to <period.until date>' \
+  --body $RUN/report.md
+mason publish code-review-retrospective/<period.until date> --repo <repo.name>
 ```
+
+The report is kept as mason's copy first (`save-result` validates its data), then published
+where the project's settings say (`[code-review-retrospective] publish`, by default an issue with the
+`automation` label). `publish` prints the link.
 
 ## Step 6: Propose skill changes
 

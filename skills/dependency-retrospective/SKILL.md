@@ -1,9 +1,9 @@
 ---
 name: dependency-retrospective
 description: 'This skill should be used when asked to "run the dependency retrospective", "review how the dependency upgrades are going", "check the upgrade outcomes", "are we keeping up with security alerts" or "find abandoned packages" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over dependency-upgrades: a script collects what happened to the upgrade PRs and the alerts over a period, and this skill judges it in three areas: whether alerts are fixed fast enough, whether the upgrade skill classified correctly, and which packages look stale or abandoned. It opens one report issue, and proposes changes to the upgrade skill as a PR when the evidence warrants it.'
-version: 1.1.0
+version: 1.2.0
 metadata:
-  mason-requires: '>=0.2,<0.4'
+  mason-requires: '>=0.3,<0.4'
   mason-task: 'Run the dependency retrospective for this project'
   mason-tools: 'Bash(uv run --locked python -m unittest *), Bash(ruff *)'
   mason-github: 'alerts'
@@ -45,6 +45,7 @@ report: `mason defer <RUN> --action '<what to do>' --reason '<why it needs a per
 
 | Action | Level |
 |---|---|
+| Keep the result as mason's copy (`mason save-result`) | Unattended |
 | Collect outcomes; read PRs, commits, comments and registries | Unattended |
 | Write findings and the report to the run directory | Unattended |
 | Open the report issue | Unattended: the report is the point |
@@ -161,9 +162,15 @@ Validate each with `mason validate`. Then:
 ```sh
 mason render-retrospective $RUN/outcomes.json --run $RUN/run.json \
   --findings $RUN/findings/*.json -o $RUN/report.md
-gh issue create --repo <repo.name> --label automation \
-  --title 'Dependency retrospective: <period.since date> to <period.until date>' --body-file $RUN/report.md
+mason save-result $RUN/outcomes.json $RUN/findings/*.json --run $RUN/run.json \
+  --key <period.until date> --title 'Dependency retrospective: <period.since date> to <period.until date>' \
+  --body $RUN/report.md
+mason publish dependency-retrospective/<period.until date> --repo <repo.name>
 ```
+
+The report is kept as mason's copy first (`save-result` validates its data), then published
+where the project's settings say (`[dependency-retrospective] publish`, by default an issue with the
+`automation` label). `publish` prints the link.
 
 The dates are the first ten characters of `period.since` and `period.until`.
 

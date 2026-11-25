@@ -1,9 +1,9 @@
 ---
 name: dependency-assessment
 description: 'This skill should be used when asked to "run the dependency assessment", "assess the Dependabot alerts", "triage Dependabot alerts", "what is the state of our security alerts" or "update the dependency assessment" in a project, interactively or unattended (from a scheduler or another agent). It pulls every open Dependabot alert, classifies each against what is actually installed on the main branch (separating end-of-life lines, blocked ranges, major bumps and missing fixes from easy upgrades), searches for existing tracked work, writes a finding per package, and publishes the result to the month''s assessment issue: the body is replaced with the latest assessment and a comment says what changed. It changes no code: dependency-upgrades applies the easy findings.'
-version: 1.0.0
+version: 1.1.0
 metadata:
-  mason-requires: '>=0.2,<0.4'
+  mason-requires: '>=0.3,<0.4'
   mason-task: 'Run the dependency assessment for this project'
   mason-github: 'alerts'
 ---
@@ -47,6 +47,7 @@ report: `mason defer <RUN> --action '<what to do>' --reason '<why it needs a per
 
 | Action | Level |
 |---|---|
+| Keep the result as mason's copy (`mason save-result`) | Unattended |
 | Read alerts, manifests, lockfiles, issues and PRs | Unattended |
 | Write findings and the assessment to the run directory | Unattended |
 | Open, update and comment on the month's assessment issue; close the previous month's | Unattended: the issue is the hand-off |
@@ -161,25 +162,17 @@ mason build-assessment $PROJECT --run $RUN/run.json --alerts $RUN/alerts.json \
 It refuses, naming each one, unless every open alert is in exactly one finding or already fixed.
 Fix the findings and run it again; never leave an alert out to get past it.
 
-## Step 6: Publish to the month's issue
+## Step 6: Save, then publish to the month's issue
 
 Get the title: `mason render-assessment $RUN/assessment.json --run $RUN/run.json --title`. Then
-find the month's issue, by exact title:
+look for the month's issue, by exact title, to compare against the assessment it holds now:
 
 ```sh
 gh issue list --repo <repo.name> --label automation --state open --search 'in:title "<title>"' --json number,url,title
 ```
 
-**If it exists,** read the assessment it holds now, then replace the body and comment on what
-changed:
-
-```sh
-gh issue view <N> --repo <repo.name> --json body -q .body | mason extract --schema assessment/1 -o $RUN/previous.json
-mason render-assessment $RUN/assessment.json --run $RUN/run.json --findings <every finding file> -o $RUN/body.md
-mason render-assessment-comment $RUN/assessment.json --run $RUN/run.json --previous $RUN/previous.json -o $RUN/comment.md
-gh issue edit <N> --repo <repo.name> --body-file $RUN/body.md
-gh issue comment <N> --repo <repo.name> --body-file $RUN/comment.md
-```
+**If it exists,** read its assessment: `gh issue view <N> --repo <repo.name> --json body -q .body
+| mason extract --schema assessment/1 -o $RUN/previous.json`.
 
 **If it doesn't,** this run starts the month. Look for the previous month's open issue:
 
@@ -187,14 +180,30 @@ gh issue comment <N> --repo <repo.name> --body-file $RUN/comment.md
 gh issue list --repo <repo.name> --label automation --state open --search 'in:title "Dependency assessment:"' --json number,url,title
 ```
 
-If there is one, read its assessment into `$RUN/previous.json` as above. Then open the month's
-issue (with `--previous-issue <its url>` on `render-assessment` when there is a previous one),
-comment the changes against `$RUN/previous.json` (or with no `--previous`, for the very first
-assessment), and close the previous issue pointing at the new one:
+If there is one, read its assessment into `$RUN/previous.json` as above, and pass
+`--previous-issue <its url>` to `render-assessment` below. For the very first assessment there is
+no previous one: leave out `--previous`.
+
+Render the body and the comment on what changed, then keep both as mason's copy of the month:
 
 ```sh
-gh issue create --repo <repo.name> --title '<title>' --body-file $RUN/body.md --label automation
-gh issue comment <new N> --repo <repo.name> --body-file $RUN/comment.md
+mason render-assessment $RUN/assessment.json --run $RUN/run.json --findings <every finding file> -o $RUN/body.md
+mason render-assessment-comment $RUN/assessment.json --run $RUN/run.json --previous $RUN/previous.json -o $RUN/comment.md
+mason save-result $RUN/assessment.json <every finding file> --run $RUN/run.json --key <YYYY-MM> \
+  --title '<title>' --body $RUN/body.md --comment $RUN/comment.md
+mason publish dependency-assessment/<YYYY-MM> --repo <repo.name>
+```
+
+`publish` sends it where the project's settings say (`[dependency-assessment] publish`, by
+default an issue). For an issue it finds the month's issue on GitHub: it opens it, with the
+comment, the first time in a month, and on every later run replaces its body and adds the
+comment. It prints the link. Each run's assessment is also kept in mason; `mason results` lists
+them.
+
+When this run started the month and there was a previous month's issue, close it, pointing at
+the new one:
+
+```sh
 gh issue close <previous N> --repo <repo.name> --comment 'Continued in <new url>.'
 ```
 

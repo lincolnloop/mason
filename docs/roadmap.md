@@ -110,9 +110,9 @@ Results kept by mason as the master copy, published wherever the developer choos
 `docs/workflows.md` §8 (plan steps 6 and 7).
 
 - The results directory, `mason save-result`, `mason publish`, `mason results` (built; targets
-  `discussion` and `file:`).
-- `dependency-report` (built), then the retrospectives, the assessment and Sentry triage, moved to save
-  first and publish where the settings say.
+  `discussion`, `issue` and `file:`).
+- `dependency-report`, then the retrospectives, the assessment and Sentry triage, moved to save
+  first and publish where the settings say (built; new target `issue`).
 - `mason note` and the `notes` skill, for analyses and assessments kept out of the project's
   history (built).
 

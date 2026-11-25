@@ -255,8 +255,11 @@ mason publish dependency-report/2026-10 --repo <owner>/<repo> --to file:~/Report
 mason results --repo <owner>/<repo> --remove dependency-report/2026-10
 ```
 
-A workflow publishes to its `publish` setting (`[dependency-report] publish =
-['discussion', 'file:~/Reports/']`); an empty list keeps the result without publishing it. A
+Every workflow that reports saves first, then publishes to its `publish` setting:
+`[dependency-report] publish = ['discussion', 'file:~/Reports/']`, or `issue` (the default for
+the assessment, the retrospectives and Sentry triage). An empty list keeps the result without
+publishing it. dependency-upgrades reads the month's assessment from its issue, so keep `issue`
+for the assessment on projects that run upgrades. A
 re-run keeps the earlier version beside the new one, and `mason results` marks copies made from
 an older version.
 

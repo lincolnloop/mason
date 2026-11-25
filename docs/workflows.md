@@ -258,8 +258,12 @@ produced.
 
 *Built in 0.3 (plan step 6): `mason save-result`, `mason publish`, `mason results`, with
 `dependency-report` saving first. Each result's `meta.json` holds its title, the file to
-publish, when it was saved and the run that saved it; `issue` targets, a comment on a
-discussion when its master changes, and moving the other workflows are still to come.*
+publish, when it was saved and the run that saved it. Every workflow that publishes a report
+saves it first: dependency-report, dependency-assessment, the three retrospectives and Sentry
+triage. Targets are `discussion`, `issue` and `file:`. An `issue` is found on GitHub by its
+title, so two machines keep one; a result saved with a `--comment` (what changed, as the
+assessment is) replaces an open issue's body and adds the comment, and any other is refused
+rather than replacing it. A comment on a discussion when its master changes is still to come.*
 
 Each project gets a results directory under `XDG_DATA_HOME`, the XDG directory for data a
 person keeps, not under `XDG_STATE_HOME` beside the runs:

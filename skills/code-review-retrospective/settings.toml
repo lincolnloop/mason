@@ -5,3 +5,11 @@
 type = 'int'
 required = true
 default = 30
+
+# Where the result is published from mason's copy (`mason publish`): `issue` (in the
+# project, with the `automation` label), `discussion:<category>`, or `file:<directory>`.
+# Empty: kept, not published.
+[publish]
+type = 'list'
+required = true
+default = ['issue']

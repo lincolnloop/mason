@@ -1,9 +1,9 @@
 ---
 name: sentry-retrospective
 description: 'This skill should be used when asked to "run the Sentry retrospective", "did the Sentry fixes work", "are the errors coming back" or "how are we doing on Sentry errors" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over sentry-errors: a script checks, for every fix PR, whether its Sentry issues stopped after the merge, and collects the triage issues and what is still unresolved. This skill judges why fixes didn''t work, what keeps recurring, and what the project should change so the same class of error doesn''t ship again. It opens one report issue, and proposes skill changes as a PR when the evidence warrants it.'
-version: 1.0.1
+version: 1.1.0
 metadata:
-  mason-requires: '>=0.2,<0.4'
+  mason-requires: '>=0.3,<0.4'
   mason-task: 'Run the Sentry retrospective for this project'
   mason-tools: 'Bash(uv run --locked python -m unittest *), Bash(ruff *)'
   mason-env: 'SENTRY_AUTH_TOKEN'
@@ -45,6 +45,7 @@ report: `mason defer <RUN> --action '<what to do>' --reason '<why it needs a per
 
 | Action | Level |
 |---|---|
+| Keep the result as mason's copy (`mason save-result`) | Unattended |
 | Collect outcomes; read PRs, issues and Sentry | Unattended |
 | Open the report issue | Unattended: the report is the point |
 | Open a PR to this repository proposing a skill change | Unattended: a person merges it |
@@ -129,9 +130,15 @@ each. Then:
 ```sh
 mason render-sentry-retrospective $RUN/outcomes.json --run $RUN/run.json \
   --findings $RUN/findings/*.json -o $RUN/report.md
-gh issue create --repo <repo.name> --label automation \
-  --title 'Sentry retrospective: <period.since date> to <period.until date>' --body-file $RUN/report.md
+mason save-result $RUN/outcomes.json $RUN/findings/*.json --run $RUN/run.json \
+  --key <period.until date> --title 'Sentry retrospective: <period.since date> to <period.until date>' \
+  --body $RUN/report.md
+mason publish sentry-retrospective/<period.until date> --repo <repo.name>
 ```
+
+The report is kept as mason's copy first (`save-result` validates its data), then published
+where the project's settings say (`[sentry-retrospective] publish`, by default an issue with the
+`automation` label). `publish` prints the link.
 
 ## Step 6: Propose skill changes
 

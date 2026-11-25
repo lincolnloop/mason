@@ -460,6 +460,12 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument('--key', required=True, help='what names the result, e.g. 2026-10')
     cmd.add_argument('--title', required=True, help='its title wherever it is published')
     cmd.add_argument('--body', type=Path, required=True, help='the markdown file to publish')
+    cmd.add_argument(
+        '--comment',
+        type=Path,
+        help='what changed since the last version: an issue already open under the title gets '
+        'this body and this comment',
+    )
 
     cmd = commands.add_parser(
         'publish', help='copy a result to where the settings say, or to --to; records each copy'
@@ -470,7 +476,7 @@ def main(argv: list[str] | None = None) -> int:
         '--to',
         action='append',
         default=[],
-        help="discussion[:<category>] or file:<directory>; repeatable (default: the workflow's "
+        help="discussion[:<category>], issue or file:<directory>; repeatable (default: the workflow's "
         '`publish` setting)',
     )
 
@@ -1328,7 +1334,9 @@ def _defer(args: argparse.Namespace) -> str:
 
 def _save_result(args: argparse.Namespace) -> str:
     try:
-        saved = results.save(args.run, args.key, args.files, args.body, args.title)
+        saved = results.save(
+            args.run, args.key, args.files, args.body, args.title, comment=args.comment
+        )
     except results.ResultError as exc:
         raise Refused(str(exc)) from exc
     return f'{saved}\n'

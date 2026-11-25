@@ -1,9 +1,9 @@
 ---
 name: sentry-errors
 description: 'This skill should be used when asked to "fix the Sentry errors", "triage Sentry for production", "run the Sentry pass", "look at the unresolved errors" or "fix the N+1 queries Sentry reports" in a project, interactively or unattended (from a scheduler or another agent). It reads one environment''s unresolved Sentry issues through the API (without personal data), groups them by root cause, checks each group''s releases and history, and records every group as a finding. It fixes the most valuable fixable group as one pull request, with a regression test and a signal the retrospective checks: that the errors stop. Findings that need a person go in the PR, or in a triage issue when there is nothing to fix.'
-version: 1.0.1
+version: 1.1.0
 metadata:
-  mason-requires: '>=0.2,<0.4'
+  mason-requires: '>=0.3,<0.4'
   mason-task: 'Run the Sentry errors workflow for this project'
   mason-tools: 'Bash(make *), Bash(npm *)'
   mason-env: 'SENTRY_AUTH_TOKEN'
@@ -50,6 +50,7 @@ report: `mason defer <RUN> --action '<what to do>' --reason '<why it needs a per
 
 | Action | Level |
 |---|---|
+| Keep the result as mason's copy (`mason save-result`) | Unattended |
 | Read Sentry, the code and the git history | Unattended |
 | Write findings and the change to the run directory | Unattended |
 | Commit a fix with its test, push the branch, open the PR | Unattended: the PR is the hand-off |
@@ -189,9 +190,13 @@ or a `code_fix` too big for one PR), and none is already open (Step 1.5):
 
 ```sh
 mason render-triage --environment <environment> --run $RUN/run.json --findings <the findings> -o $RUN/triage.md
-gh issue create --repo <repo.name> --label automation \
-  --title 'Sentry triage (<environment>): <run date>' --body-file $RUN/triage.md
+mason save-result <the findings> --run $RUN/run.json --key <environment>-<run date> \
+  --title 'Sentry triage (<environment>): <run date>' --body $RUN/triage.md
+mason publish sentry-errors/<environment>-<run date> --repo <repo.name>
 ```
+
+The triage is kept as mason's copy first, then published where the project's settings say
+(`[sentry-errors] publish`, by default an issue with the `automation` label).
 
 If there is nothing new, open nothing: say so in the report.
 

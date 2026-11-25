@@ -166,6 +166,58 @@ class PublishTests(Clean):
             results.load(REPO, 'dependency-upgrades', '2026-10')
 
 
+class FakeIssues:
+    """gh for issues: the open issues it holds, and the calls made."""
+
+    def __init__(self, open_issues: list[dict] | None = None) -> None:
+        self.open, self.calls = open_issues or [], []
+
+    def __call__(self, *args: str) -> str:
+        self.calls.append(list(args))
+        if args[:2] == ('issue', 'list'):
+            return json.dumps(self.open)
+        if args[:2] == ('issue', 'create'):
+            return 'https://github.com/example/project/issues/5\n'
+        return ''
+
+
+class IssueTests(Clean):
+    def saved(self, comment: bool) -> results.Result:
+        run_dir = self.run_dir()
+        (run_dir / 'comment.md').write_text('What changed.')
+        results.save(
+            run_dir / 'run.json', '2026-11', [], run_dir / 'body.md', 'Dependency assessment: November',
+            comment=run_dir / 'comment.md' if comment else None,
+        )  # fmt: skip
+        return results.load(REPO, 'dependency-upgrades', '2026-11')
+
+    def test_opens_the_issue_with_its_comment(self) -> None:
+        gh = FakeIssues([{'number': 3, 'url': 'u3', 'title': 'Dependency assessment: November 2'}])
+        result = self.saved(comment=True)
+        self.assertEqual(result.meta['comment'], 'comment.md')
+        url = results.publish(result, 'issue', gh)
+        self.assertEqual(url, 'https://github.com/example/project/issues/5')
+        create = next(c for c in gh.calls if c[:2] == ['issue', 'create'])
+        self.assertIn('automation', create)
+        self.assertEqual(create[create.index('--title') + 1], 'Dependency assessment: November')
+        self.assertEqual(gh.calls[-1][:3], ['issue', 'comment', url])
+
+    def test_a_later_version_replaces_the_body_and_comments(self) -> None:
+        gh = FakeIssues([{'number': 5, 'url': 'u5', 'title': 'Dependency assessment: November'}])
+        self.assertEqual(results.publish(self.saved(comment=True), 'issue', gh), 'u5')
+        self.assertEqual(
+            [c[:3] for c in gh.calls[1:]], [['issue', 'edit', 'u5'], ['issue', 'comment', 'u5']]
+        )
+        result = results.load(REPO, 'dependency-upgrades', '2026-11')
+        self.assertEqual([p['where'] for p in result.published], ['u5'])
+
+    def test_without_a_comment_an_open_issue_is_not_replaced(self) -> None:
+        gh = FakeIssues([{'number': 5, 'url': 'u5', 'title': 'Dependency assessment: November'}])
+        with self.assertRaisesRegex(results.ResultError, 'u5 is already'):
+            results.publish(self.saved(comment=False), 'issue', gh)
+        self.assertEqual(len(gh.calls), 1)
+
+
 class CliTests(Clean):
     def mason(self, *args: str, stdin: str = '') -> subprocess.CompletedProcess[str]:
         return subprocess.run(
