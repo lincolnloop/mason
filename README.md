@@ -1,8 +1,22 @@
 # mason
 
-Agent workflows shared across repositories. Each workflow is a skill that does one job and
-writes structured artifacts, so steps compose. A project picks how much to automate by picking
-which steps a person does.
+A developer's assistant for the maintenance work that is first to be dropped when time is
+short: security upgrades, code review, error triage, and reporting on them. mason runs that
+work as agent workflows across every project you look after, and shows you in one place what
+needs you.
+
+Each workflow is a skill that does one job and hands the next a validated artifact, so steps
+compose, and what it publishes is a pull request, a review, an issue or a discussion that a
+person decides. You choose which workflows run on each project, and which steps stay yours.
+
+```sh
+mason project add <owner>/<repo>                    # once per project: choose its workflows
+mason run dependency-assessment --repo <owner>/<repo>
+mason run code-review --repo <owner>/<repo> --pr 42 --unattended
+mason inbox                                         # what needs you, across every project
+```
+
+Set up below, then [Run it](#run-it) and [What needs you](#what-needs-you).
 
 | Workflow | Source | Output |
 |---|---|---|
@@ -230,13 +244,18 @@ lib/artifacts/schemas/      the artifact contracts, with examples (`schemas/` li
 lib/artifacts/              validators, renderers, embedding, config, locking, the dependency
                             readers, outcome collection, and the unattended runner
 lib/artifacts/cli.py        the `mason` command the skills call (`mason --help` lists them all):
-                            config, doctor, run-start, lock, validate, schema, source, the
-                            collectors, the renderers, annotate-diff, extract. From a checkout,
+                            project, run, inbox, defer, config, doctor, run-start, lock,
+                            validate, schema, source, the collectors, the renderers,
+                            annotate-diff, extract. From a checkout,
                             `uv run mason` or `bin/artifact` runs it
 pyproject.toml, uv.lock     the Python environment uv runs every script in, and its lock
 tests/                      stdlib unittest; the schema pages' examples are tests too
-docs/design.md              principles, steps and hand-offs, autonomy, distribution
-docs/method.md              the checks the workflow makes, and why
+docs/design.md              principles, artifacts, steps and hand-offs, autonomy
+docs/method.md              the checks each workflow makes, and why
+docs/packaging.md           how mason is installed and run per developer
+docs/workflows.md           proposed: installable workflows, results, schedules
+docs/roadmap.md             the releases, in order
+CHANGELOG.md                what changed in each release
 mason.toml.example          a project's settings file with every key set, to copy and edit
 ```
 
@@ -249,6 +268,8 @@ developer, so those are the developer's (docs/packaging.md):
 |---|---|
 | Settings for a project | `~/.config/mason/projects/<owner>/<repo>.toml` |
 | Runs, locks and logs | `~/.local/state/mason/<owner>/<repo>/` |
+| mason's clone of the project | `~/.cache/mason/repos/<owner>/<repo>/` |
+| mason's skills (unless `--global`) | `~/.local/share/mason/.claude/skills/` |
 | Tokens | `~/.config/mason/env` |
 
 (Or under `$XDG_CONFIG_HOME` and `$XDG_STATE_HOME`, when those are set.) A settings file states

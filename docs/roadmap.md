@@ -83,11 +83,10 @@ prose. Unattended runs also record how they ended beside their log, so failures 
 
 ### Tidying for a release
 
-- A version number that matches the roadmap. `pyproject.toml` says `0.2.0`; either reset it to
-  `0.1.0` for this release, or name this release `0.3` and shift the rest.
-- `design.md` §7 replaced by `packaging.md`, which supersedes it.
-- The README rewritten around `mason project add`, `mason run` and `mason inbox`.
-- A changelog, started with this release.
+- The version is `0.1.0`, matching the roadmap (built).
+- `design.md` §7 replaced by a pointer to `packaging.md` (built).
+- The README opens with `mason project add`, `mason run` and `mason inbox` (built).
+- `CHANGELOG.md`, started with this release (built).
 
 ## 0.2: workflows as installable skills
 

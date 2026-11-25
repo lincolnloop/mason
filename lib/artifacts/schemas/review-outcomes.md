@@ -1,7 +1,7 @@
 # `review-outcomes/1`
 
 What happened to each finding `code-review` posted, over a period. It is collected by a script,
-`artifact collect-review-outcomes`, so the code-review retrospective judges facts it didn't
+`mason collect-review-outcomes`, so the code-review retrospective judges facts it didn't
 gather itself. Warp's factory works the same way: a daily job collects people's reactions to
 automated reviews, and an agent decides what the review skill should learn from them.
 

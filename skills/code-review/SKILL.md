@@ -3,7 +3,7 @@ name: code-review
 description: 'This skill should be used when asked to "review PR #N", "review this pull request", "do a code review of #N", "re-review #N" or "follow up on the review of #N" in a project, interactively or unattended (from a scheduler or another agent). It gathers the pull request, its diff annotated with line coordinates, and any earlier review by this skill; reviews the change against the project''s own rules; writes the findings as a validated review.json; and posts one consolidated review that neither approves nor blocks. A follow-up review reports what happened to each earlier finding.'
 version: 1.2.1
 metadata:
-  mason-requires: '>=0.2,<0.3'
+  mason-requires: '>=0.1,<0.2'
 ---
 
 # Code review

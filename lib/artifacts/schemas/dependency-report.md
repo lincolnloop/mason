@@ -1,7 +1,7 @@
 # `dependency-report/1`
 
 One calendar month's vulnerability figures, published as a report for the people the project
-answers to: a client, a manager, an auditor. `artifact collect-report` builds it from the
+answers to: a client, a manager, an auditor. `mason collect-report` builds it from the
 Dependabot alert history, using the same counting rules as the retrospective's `outcomes/2`
 (`outcomes.classify`), so the two never disagree. It is embedded in the published report, so the
 figures stay as published even if an advisory's severity is revised later.

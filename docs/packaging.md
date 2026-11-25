@@ -45,9 +45,9 @@ How mason is installed, configured and run against a project. It replaces the "s
 Two commands, both from the same release tag:
 
 ```sh
-uv tool install git+https://github.com/example-org/mason@v0.6
-mason skills install example-org/mason@v0.6            # for mason's sessions only
-mason skills install example-org/mason@v0.6 --global   # or: for every agent session
+uv tool install git+https://github.com/example-org/mason@v0.1.0
+mason skills install example-org/mason@v0.1.0            # for mason's sessions only
+mason skills install example-org/mason@v0.1.0 --global   # or: for every agent session
 ```
 
 - **The engine** is a uv tool: `mason` on the PATH, in its own environment, upgraded with
@@ -87,7 +87,7 @@ Each workflow skill declares the mason versions it works with in its frontmatter
 
 ```yaml
 metadata:
-  mason-requires: '>=0.2,<0.3'
+  mason-requires: '>=0.1,<0.2'
 ```
 
 `mason doctor` checks every installed workflow skill. `mason run`, and `mason run-start` (the
@@ -124,7 +124,7 @@ repository without anyone noticing.
 Because the last `add` wins, replacement is a matter of install order, recorded in the lock:
 
 ```sh
-npx skills add example-org/mason@v0.6 -g --skill '*'                # the defaults
+npx skills add example-org/mason@v0.1.0 -g --skill '*'                # the defaults
 npx skills add example-org/team-skills -g --skill dependency-report # replaces one, with a warning
 ```
 

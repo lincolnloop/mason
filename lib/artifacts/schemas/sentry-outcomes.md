@@ -1,7 +1,7 @@
 # `sentry-outcomes/1`
 
 Whether the fixes `sentry-errors` shipped made their errors stop. It is collected by a script,
-`artifact collect-sentry-outcomes`, from GitHub (the fix PRs and triage issues) and Sentry (each
+`mason collect-sentry-outcomes`, from GitHub (the fix PRs and triage issues) and Sentry (each
 fixed issue's last event), so the Sentry retrospective judges facts rather than impressions.
 
 ```json

@@ -1,7 +1,7 @@
 # `outcomes/2`
 
 What happened to a workflow's PRs, and to the project's alerts, over a period. It is collected
-by a script, `artifact collect-outcomes`, so a retrospective judges facts it didn't count or
+by a script, `mason collect-outcomes`, so a retrospective judges facts it didn't count or
 date itself. It is the same split Warp's factory uses for its review feedback loop: collect
 with a script, judge with an agent.
 

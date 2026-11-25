@@ -4,7 +4,7 @@ A workflow skill and the commands it calls change together, so each skill states
 versions it works with in its frontmatter:
 
     metadata:
-      mason-requires: '>=0.2,<0.3'
+      mason-requires: '>=0.1,<0.2'
 
 (`metadata` is the open SKILL.md format's map of strings, so other agents ignore it.) mason
 refuses to start a run whose skill states a range this mason is outside, with the command that
@@ -86,12 +86,12 @@ def _version_tuple(text: str) -> tuple[int, ...]:
 
 
 def satisfies(engine: str, requirement: str) -> bool:
-    """Whether a version meets a range such as '>=0.2,<0.3'."""
+    """Whether a version meets a range such as '>=0.1,<0.2'."""
     have = _version_tuple(engine)
     for clause in requirement.split(','):
         match = REQUIREMENT.match(clause.strip())
         if not match:
-            raise SkillError(f'{clause.strip()!r} is not a version requirement (e.g. >=0.2,<0.3)')
+            raise SkillError(f'{clause.strip()!r} is not a version requirement (e.g. >=0.1,<0.2)')
         operator, wanted = match.groups()
         want = _version_tuple(wanted)
         width = max(len(have), len(want))

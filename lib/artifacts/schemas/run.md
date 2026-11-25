@@ -9,14 +9,14 @@ machine that ran it:
   with the open alerts the PR doesn't cover. The PR itself is not changed, so a reviewer
   part-way through it isn't surprised by new commits.
 
-`artifact run-start <project> <workflow>` writes it at the start of a run. The renderers set
+`mason run-start <project> <workflow>` writes it at the start of a run. The renderers set
 `outcome` when they publish it.
 
 ```json
 {
   "schema": "run/1",
   "project": "example-org/example-app",
-  "produced_by": {"skill": "dependency-upgrades", "automation_sha": "889bd9b0000000000000000000000000000000aa", "mason_version": "0.2.0", "skill_version": "3.0.0"},
+  "produced_by": {"skill": "dependency-upgrades", "automation_sha": "889bd9b0000000000000000000000000000000aa", "mason_version": "0.1.0", "skill_version": "3.0.0"},
   "id": "20261111-093000-dependency-upgrades",
   "trigger": "unattended",
   "started_by": "systemd timer dependency-upgrades.timer",

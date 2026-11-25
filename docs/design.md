@@ -53,7 +53,7 @@ is as easy to decide.
 
 Each artifact is embedded in what it is published with (a PR, review, issue or discussion), in a
 collapsed `<details>` block in the body, so every copy carries its data and the next step can read
-it from there. `artifact extract` reads them back out. The master of a result, its artifacts with
+it from there. `mason extract` reads them back out. The master of a result, its artifacts with
 it, is the copy mason keeps in the project's results directory until the developer removes it
 (`docs/workflows.md` §8); a published copy is what other people and other machines read.
 
@@ -154,46 +154,52 @@ monthly), and it learns from outcomes rather than opinions:
 - **The project:** stale, deprecated or archived packages, and packages that keep producing
   alerts.
 
-The facts are collected by a script (`artifact collect-outcomes`, `schemas/outcomes.md`), and
+The facts are collected by a script (`mason collect-outcomes`, `schemas/outcomes.md`), and
 the agent only judges them. The report is a GitHub issue with the outcomes and findings
 embedded, so each retrospective continues from the last, and a recurring finding is visible as
 recurring.
 
 ### 4.3 Running it
 
-- **Interactively:** from the project, `claude --add-dir path/to/mason`, then "run the
-  dependency upgrades". The skill asks before anything marked *confirm first*.
-- **Unattended:** `bin/unattended dependency-upgrades <project>`, for a scheduler or another
-  agent. It runs Claude Code headless with `MASON_UNATTENDED=1`, and with permissions that
-  allow only what the workflow needs. Anything else is refused, not asked about. The skill asks
-  nothing. It lists what needed a person in its report, leaves the tests to CI when it can't
-  run them locally (`verify.ci`), and opens a draft when it can't verify at all.
+- **Interactively:** `mason run <workflow> --repo <owner>/<repo>` starts Claude Code in mason's
+  clone of the project with the request typed in (or ask for the workflow by name in any
+  session, with the skills installed `--global`). The skill asks before anything marked
+  *confirm first*.
+- **Unattended:** `mason run <workflow> --repo <owner>/<repo> --unattended`, for a scheduler or
+  another agent. It runs Claude Code headless with `MASON_UNATTENDED=1`, and with permissions
+  that allow only what the workflow needs. Anything else is refused, not asked about. The skill
+  asks nothing. It lists what needed a person in its report, and records each such action with
+  `mason defer` for the developer's inbox. It leaves the tests to CI when it can't run them
+  locally (`verify.ci`), and opens a draft when it can't verify at all.
 - **Prerequisites are checked before a run starts.** The bootstrap set is git, gh, Claude Code
-  and uv; uv provides Python and the dependencies `uv.lock` pins. `bin/unattended` runs
-  `artifact doctor` first, offline, and starts no session if a tool, login, token or the locked
-  environment is missing. Sessions run with `UV_OFFLINE=1`, so a run never resolves or
-  downloads a package.
-- **One run at a time per project.** `artifact lock` holds a lock under `runs/` for the length
-  of a run, so overlapping triggers can't race.
+  and uv. `mason run --unattended` runs `mason doctor` first and starts no session if a tool,
+  login, token or a skill matching this mason is missing.
+- **Only the workflows chosen for a project run** (`[workflows] enabled`, written by
+  `mason project add`), and an archived project runs nothing.
+- **One run at a time per project.** `mason lock` holds a lock in the project's state directory
+  for the length of a run, so overlapping triggers can't race.
 - **One run, one PR.** A run never adds to an open upgrade PR, because a reviewer part-way
   through it wouldn't notice a new commit. A run that finds one open stops, and comments on it
   with its run record and the open alerts that PR doesn't cover. So a manual run started while
   an unattended run's PR is waiting leaves its own trace, and each PR's history is its own run's.
 - **Every run is identified:** an id, `interactive` or `unattended`, who or what started it
-  (`bin/unattended --trigger`, or the GitHub login), the host, and the time. The PR ends with
-  it, and embeds it as `run/1`.
+  (`mason run --trigger`, or the GitHub login), the time, and the versions of the skill and of
+  mason. The PR ends with it, and embeds it as `run/1`.
+- **What needs a person is gathered in one place:** `mason inbox` lists failed runs, deferred
+  actions, and the PRs and issues waiting on someone, across every project.
 
 How often to trigger is a project's choice. Vulnerabilities are acted on fastest when a run
 starts soon after an alert opens. The cost of a run with nothing to do is small: it opens no PR.
 
 ## 5. Configuration
 
-Skills get every project value from `artifact config <project>`, never from their own text. It
+Skills get every project value from `mason config <project>`, never from their own text. It
 resolves each key in turn from:
 
-1. **The project's `mason.toml`, at its root, if it sets the key.** Adding the file is how a
-   project adopts mason, as a project adds `.pre-commit-config.yaml` to adopt pre-commit, but it
-   is optional. An empty list counts as set, so `npm_projects = []` turns npm off. The file
+1. **The developer's settings file for the project, if it sets the key:**
+   `~/.config/mason/projects/<owner>/<repo>.toml`, written by `mason project add`. The settings
+   are the developer's, not the project's (`packaging.md` §1), and the file is optional. An
+   empty list counts as set, so `npm_projects = []` turns npm off. The file
    states its format's `version`. A mason that reads a different version refuses the file, and
    says how to update it, rather than misreading it.
 2. **The repository, where it says:**
@@ -216,7 +222,7 @@ resolves each key in turn from:
 So the skill runs in a new repository without any setup. The file is added, one key at a time,
 once a value needs to differ.
 
-`artifact config --toml` prints the resolved values as a starting file. Detected and default
+`mason config --toml` prints the resolved values as a starting file. Detected and default
 values are commented out and labelled with where they came from, and uncommenting a line pins
 that value. The JSON output has a `sources` map, so the skill can tell the person what it
 assumed.
@@ -242,60 +248,7 @@ an example project, to copy and edit.
 | Merge | Not the upgrade skill's job: a person, or a separate merge step under the project's policy |
 | Dismiss an alert; change this repo's skills | Person only |
 
-## 7. Distribution: a star, with this repo at the centre
+## 7. Distribution
 
-> **Being replaced:** `docs/packaging.md` moves mason to a per-developer install, with settings
-> and run state outside every repository. Much of it is built (its §9 says what): where this
-> section disagrees with it, `docs/packaging.md` is current.
-
-There is one checkout of this repo. Projects around it are reached with `--add-dir`, so no project
-holds a copy of the workflow skills. Facts from the Claude Code docs (checked 2026-11-10):
-
-- **`@` references don't work for this.** A `@` reference to a directory adds only a file
-  listing and doesn't grant access. The working mechanism is `--add-dir` (or `/add-dir`). Files
-  there follow the normal permission rules, and a Bash `cd` into the directory persists.
-- **What loads from an added directory:**
-  - `.claude/skills/`, `.claude/commands/` and `.claude/agents/` always;
-  - `CLAUDE.md` only when `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1` is set;
-  - never `AGENTS.md` (make `CLAUDE.md` a symlink to it), hooks, `.mcp.json` or most settings.
-    Hooks and MCP servers come only from the primary working directory.
-- **Codex** (its skills docs, checked 2026-11-12) reads the same `SKILL.md` format (`name` and
-  `description` required). It scans `.agents/skills` in every directory from the working
-  directory up to the repository root, then `~/.agents/skills` and `/etc/codex/skills`, and
-  follows symlinked skill folders. The docs don't say that a directory added with `--add-dir`
-  is scanned, and `--add-dir` is what gives the session write access to it. So with Codex the
-  skills are linked into `~/.agents/skills` (`bin/link-skills`), and the session is launched
-  with `--add-dir` for this repo, for the run files under `runs/`. Two skills with the same
-  name are both listed, not merged. Not yet tried in a live run.
-- **Gemini** has `--include-directories`. Whether it loads skills from them isn't verified.
-- **Any agent** can be told to read a skill's `SKILL.md` by path and follow it. The skills
-  use no tool that only one agent has, so this is the way in that always works.
-
-Launch from the project, so its own CLAUDE.md, skills, hooks, MCP servers and permissions all
-apply, with this repo's skills added:
-
-```sh
-cd path/to/<project>
-claude --add-dir path/to/mason
-```
-
-Consequences:
-
-- This repo exposes its skills at `.claude/skills/` and `.agents/skills/`, symlinks to
-  `skills/`, the paths Claude Code and Codex discover. A skill may be reached through a link, so
-  it finds this repo from its own path with symlinks resolved.
-- **Unattended runs are Claude Code only.** `bin/unattended` builds a `claude -p` command line,
-  with Claude Code's permission rules. Another agent needs its own adapter, mapping the same
-  intent (allowed and denied commands, the prompt, the environment) onto its own permission
-  model; Codex relies on a sandbox rather than a list of allowed commands.
-- **No vendoring.** Skills call the shared code in `lib/` by path, relative to the skill
-  directory.
-- **Every skill begins by resolving its target project.** It runs `artifact config`, reads the
-  project's `AGENTS.md`/`CLAUDE.md` explicitly rather than trusting that it was loaded, and runs
-  commands from the project root.
-- **Concurrent runs.** A workflow that branches and commits must not do it in a checkout a
-  developer is using, so it uses a git worktree of the project. Projects whose tests use docker
-  compose with shared named volumes must not run tests in two worktrees at once.
-  `verify.exclusive` makes the skill ask before it runs them.
-- **A version is a commit of this repo,** not a copy in each project. Each artifact records this
-  repo's commit SHA, so it's clear which version of the skill produced it.
+mason is installed per developer, as a uv tool with its skills beside it, and keeps nothing in
+the projects it works on. `docs/packaging.md` describes how, and why.
