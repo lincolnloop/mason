@@ -3,7 +3,7 @@
 What changed in each release of mason, for the developers who install it. Install the engine and
 its skills from the same tag: each skill states the mason versions it works with.
 
-## Unreleased (0.2)
+## 0.2.0
 
 Workflows become installable skills: a project chooses its workflows and the skill for each, and
 a new workflow needs no change to mason.

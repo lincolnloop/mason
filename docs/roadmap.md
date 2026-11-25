@@ -27,7 +27,7 @@ Built:
 
 Not built: everything below that is not marked (built).
 
-## 0.1: one developer, several projects
+## 0.1: one developer, several projects (released 0.1.0)
 
 The first release a developer can adopt for all of their projects: add a project, choose its
 workflows, and see in one place what needs them.
@@ -88,7 +88,7 @@ prose. Unattended runs also record how they ended beside their log, so failures 
 - The README opens with `mason project add`, `mason run` and `mason inbox` (built).
 - `CHANGELOG.md`, started with this release (built).
 
-## 0.2: workflows as installable skills
+## 0.2: workflows as installable skills (released 0.2.0)
 
 A project chooses its workflows, and new ones are added without changing the engine.
 `docs/workflows.md` §3 to §7 (plan steps 1 to 5).
