@@ -3,7 +3,7 @@
 What changed in each release of mason, for the developers who install it. Install the engine and
 its skills from the same tag: each skill states the mason versions it works with.
 
-## Unreleased (0.4)
+## 0.4.0
 
 - Schedules: each workflow skill declares a default (`mason-schedule`, `mason-kind`), and a
   project can set its own (`mason schedule set`). `mason status`, `due`, `overdue` and `history`

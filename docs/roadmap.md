@@ -116,7 +116,7 @@ Results kept by mason as the master copy, published wherever the developer choos
 - `mason note` and the `notes` skill, for analyses and assessments kept out of the project's
   history (built).
 
-## 0.4: schedules and status
+## 0.4: schedules and status (released 0.4.0)
 
 mason owns the schedule, and says what was done, what is due and what was missed.
 `docs/workflows.md` §9 (plan steps 8 and 9).
