@@ -7,7 +7,7 @@
 
 [project]
 name = 'mason'
-version = '0.3.0.dev0'
+version = '0.3.0'
 description = 'Agent workflows shared across repositories'
 requires-python = '>=3.12'
 dependencies = []

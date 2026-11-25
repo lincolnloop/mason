@@ -104,7 +104,7 @@ A project chooses its workflows, and new ones are added without changing the eng
 - Each run naming its skill's version and source (built). `run/2` moves to 0.4, where the
   ledger first needs its fields.
 
-## 0.3: results and notes
+## 0.3: results and notes (released 0.3.0)
 
 Results kept by mason as the master copy, published wherever the developer chooses.
 `docs/workflows.md` §8 (plan steps 6 and 7).
