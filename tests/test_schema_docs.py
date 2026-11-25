@@ -27,7 +27,7 @@ class SchemaDocTests(unittest.TestCase):
                 with self.subTest(page=page.name, example=body[:60]):
                     artifact = json.loads(body)
                     self.assertEqual(validate(artifact), [])
-        self.assertGreaterEqual(examples, 6)
+        self.assertGreaterEqual(examples, 7)
 
     def test_every_schema_has_a_page(self) -> None:
         from artifacts import VALIDATORS

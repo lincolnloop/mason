@@ -62,6 +62,11 @@ class HeadlessCommandTests(unittest.TestCase):
         added = [command[i + 1] for i, arg in enumerate(command) if arg == '--add-dir']
         self.assertEqual(added, ['/state/o/app', '/data/mason'])
 
+    def test_retrospective_can_run_masons_checks(self) -> None:
+        command = runner.command(Path('/work/app'), STATE, 'dependency-retrospective')
+        self.assertIn('Bash(uv run --locked python -m unittest *)', command)
+        self.assertNotIn('Bash(npm *)', command)
+
     def test_only_the_installed_mason_runs_python(self) -> None:
         command = runner.command(Path('/work/app'), STATE, 'dependency-upgrades')
         self.assertIn('Bash(mason *)', command)

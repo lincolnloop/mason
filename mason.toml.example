@@ -45,3 +45,15 @@ npm_projects = ['frontend', 'frontend/admin']
 npm_build = 'npm run build'
 # When left out, the skill takes the test command from the project's AGENTS.md and says so.
 verify = ['make test']
+
+[dependency-retrospective]
+# How far back a retrospective looks when there is no earlier one to continue from.
+period_days = 30
+# How fast each severity should be fixed, in days from the alert opening. Alerts open past these
+# are reported, and so is the time each fixed alert actually took.
+fix_within_days_critical = 3
+fix_within_days_high = 7
+fix_within_days_medium = 30
+fix_within_days_low = 90
+# A package with no release for this long is reported as possibly abandoned.
+stale_after_months = 24

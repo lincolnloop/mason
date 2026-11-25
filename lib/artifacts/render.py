@@ -13,6 +13,8 @@ from .embed import embed
 
 GITHUB_BODY_LIMIT = 65_536
 
+OPEN = ('new', 'still_open')
+
 
 # --- Changes -----------------------------------------------------------------------------------
 
@@ -235,6 +237,150 @@ def _link(url: str) -> str:
     return f'<{url}>'
 
 
+# --- Retrospectives ---------------------------------------------------------------------------
+
+FINDING_GROUPS = (
+    ('skill_change', 'Proposed changes to the workflow'),
+    ('investigate', 'For the project'),
+    ('external', 'Waiting on others'),
+)
+
+
+def retrospective_title(outcomes: dict[str, Any]) -> str:
+    period = outcomes['period']
+    return f'Dependency retrospective: {period["since"][:10]} to {period["until"][:10]}'
+
+
+def retrospective_body(
+    outcomes: dict[str, Any], findings: list[dict[str, Any]], run: dict[str, Any]
+) -> str:
+    """The report issue: derived tables from the outcomes, then the retrospective's findings."""
+    prs, alerts, policy = outcomes['prs'], outcomes['alerts'], outcomes['policy']
+    states = Counter(pr['state'] for pr in prs)
+    edited = sum(1 for pr in prs if pr['state'] == 'merged' and pr['edited'])
+    stale = sum(1 for pr in prs if pr['stale'])
+    fixed_total = sum(alerts['fixed'].values())
+    fixed_advisories = sum(alerts['advisories']['fixed'].values())
+    moved_total = sum(alerts['moved'].values())
+    open_total = sum(alerts['open_at_end'].values())
+    overdue = alerts['open_past_target']
+    pr_summary = (
+        f'{_count(len(prs), "upgrade PR")}: {states["merged"]} merged ({edited} after edits), '
+        f'{states["closed"]} closed without merging, {states["open"]} open ({stale} stale).'
+        if prs
+        else 'No upgrade PRs in this period.'
+    )
+    lines = [
+        f'**{retrospective_title(outcomes)}.**',
+        '',
+        f'{pr_summary} {_count(fixed_total, "alert")} fixed '
+        f'({fixed_advisories} {"advisory" if fixed_advisories == 1 else "advisories"}; '
+        f'{len(alerts["fixed_by_upgrade_prs"])} by upgrade PRs), '
+        f'{sum(alerts["opened"].values())} opened, {sum(alerts["dismissed"].values())} dismissed'
+        + (
+            f', {moved_total} closed on one manifest but still open on another'
+            if moved_total
+            else ''
+        )
+        + f'. {open_total} open at the end of the period, {len(overdue)} of them past their '
+        'target.',
+        '',
+        '## Time to fix',
+        '',
+        '| Severity | Target | Fixed | Median days | Slowest | Open at end | Past target |',
+        '|---|---:|---:|---:|---:|---:|---:|',
+    ]
+    late = Counter(a['severity'] for a in overdue)
+    for severity in deps.SEVERITIES:
+        timing = alerts['days_to_fix'][severity]
+        lines.append(
+            f'| {severity.capitalize()} | {policy["fix_within_days"][severity]} days '
+            f'| {alerts["fixed"][severity]} | {_number(timing["median"])} '
+            f'| {_number(timing["max"])} | {alerts["open_at_end"][severity]} | {late[severity]} |'
+        )
+    if overdue:
+        lines += [
+            '',
+            '<details>',
+            f'<summary>The {_count(len(overdue), "alert")} past target</summary>',
+            '',
+            '| Severity | Alert | Package | Open for |',
+            '|---|---:|---|---:|',
+        ]
+        lines += [
+            f'| {a["severity"].capitalize()} | #{a["number"]} | `{a["package"]}` '
+            f'| {_number(a["age_days"])} days |'
+            for a in overdue
+        ]
+        lines += ['', '</details>']
+
+    lines += ['', '## Upgrade PRs', '']
+    if prs:
+        lines += [
+            '| PR | Started by | Outcome | Days open | CI | Alerts closed |',
+            '|---|---|---|---:|---|---:|',
+        ]
+        for pr in prs:
+            started = f'{pr["run"]["started_by"]} ({pr["run"]["trigger"]})' if pr['run'] else '–'
+            lines.append(
+                f'| #{pr["number"]} | {_cell(started)} | {_pr_outcome(pr)} '
+                f'| {_number(pr["days_open"])} | {_cell(_ci_text(pr["ci"]))} '
+                f'| {len(pr["alerts_closed"])} |'
+            )
+    else:
+        lines.append('No upgrade PRs were open in this period.')
+
+    if outcomes['stopped_runs']:
+        lines += ['', '## Runs that stopped for an open PR', '']
+        for stopped in outcomes['stopped_runs']:
+            lines.append(
+                f'- `{stopped["id"]}`, started by {stopped["started_by"]} ({stopped["trigger"]}), '
+                f'stopped for #{stopped["pr"]} with '
+                f"{_count(stopped['alerts_not_covered'], 'alert')} it didn't cover."
+            )
+    if outcomes['reverts']:
+        lines += ['', '## Reverted upgrades', '']
+        for revert in outcomes['reverts']:
+            lines.append(
+                f'- {revert["sha"][:10]} {_cell(revert["subject"])} ({revert["date"][:10]})'
+            )
+
+    flagged = [p for p in outcomes['packages'] if p['flags']]
+    unchecked = [p for p in outcomes['packages'] if p['error']]
+    lines += ['', '## Package health', '']
+    if flagged:
+        lines += [
+            f'Stale means no release for {policy["stale_after_months"]} months.',
+            '',
+            '| Package | Flags | Latest release | Open alerts | Note |',
+            '|---|---|---|---:|---|',
+        ]
+        for package in flagged:
+            released = (package['latest_released_at'] or '')[:10] or '–'
+            lines.append(
+                f'| `{package["package"]}` ({package["ecosystem"]}) | {", ".join(package["flags"])} '
+                f'| {package["latest"] or "–"}, {released} | {package["open_alerts"]} '
+                f'| {_cell(package["deprecated"] or "")} |'
+            )
+    else:
+        lines.append(
+            f'None of the {_count(len(outcomes["packages"]), "package")} checked is stale, deprecated or archived.'
+        )
+    if unchecked:
+        names = ', '.join(f'`{p["package"]}`' for p in unchecked)
+        lines += ['', f'Could not check: {names}.']
+
+    lines += _findings_section(findings)
+    lines += ['', f'<sub>Reported by {_run_line(run)}.</sub>', '']
+    # People's comments are on the PRs already; leaving them out keeps the embedded data small.
+    compact = {**outcomes, 'prs': [{**pr, 'comments': len(pr['comments'])} for pr in prs]}
+    for artifact in (compact, *findings):
+        label = 'outcomes.json' if artifact is compact else f'finding {artifact["id"]}'
+        lines += [embed(artifact, label), '']
+    lines += [embed({**run, 'outcome': 'issue_opened'}, 'run.json'), '']
+    return _within_limit('\n'.join(lines), 'issue body')
+
+
 # --- Dependency assessments ---------------------------------------------------------------------
 
 # The order an assessment lists its findings in: what needs a decision first, what will be done
@@ -410,8 +556,50 @@ def _day(stamp: str) -> str:
     return f'{int(day)} {MONTH_NAMES[int(month) - 1]} {year}'
 
 
+def _findings_section(findings: list[dict[str, Any]]) -> list[str]:
+    lines = ['', '## Findings', '']
+    if not findings:
+        lines.append('No findings this period.')
+    for kind, heading in FINDING_GROUPS:
+        group = [f for f in findings if f['kind'] == kind]
+        if not group:
+            continue
+        lines += [f'### {heading}', '']
+        for finding in group:
+            refs = ', '.join(e['ref'] for e in finding['evidence'])
+            lines += [
+                f'- **{finding["title"]}** ({finding["severity"]}). {finding["claim"].strip()} '
+                f'Evidence: {refs}.'
+            ]
+        lines.append('')
+    return lines
+
+
+def _pr_outcome(pr: dict[str, Any]) -> str:
+    if pr['state'] == 'merged':
+        return 'merged after edits' if pr['edited'] else 'merged'
+    if pr['state'] == 'closed':
+        return 'closed'
+    notes = [n for n, on in (('draft', pr['draft']), ('stale', pr['stale'])) if on]
+    return 'open' + (f' ({", ".join(notes)})' if notes else '')
+
+
+def _ci_text(ci: dict[str, list[str]]) -> str:
+    if ci['failed']:
+        return 'failed: ' + ', '.join(ci['failed'])
+    if ci['pending']:
+        return 'pending'
+    return 'passed' if ci['passed'] else 'none'
+
+
 def _count(number: int, noun: str, plural: str | None = None) -> str:
     return f'{number} {noun if number == 1 else plural or noun + "s"}'
+
+
+def _number(value: float | None) -> str:
+    if value is None:
+        return '–'
+    return f'{value:g}'
 
 
 # --- Runs ------------------------------------------------------------------------------------

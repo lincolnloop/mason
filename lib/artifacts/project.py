@@ -57,6 +57,14 @@ SECTIONS: dict[str, dict[str, tuple[str, bool]]] = {
         'npm_build': ('str', False),
         'verify': ('list', False),
     },
+    'dependency-retrospective': {
+        'period_days': ('int', True),
+        'fix_within_days_critical': ('int', True),
+        'fix_within_days_high': ('int', True),
+        'fix_within_days_medium': ('int', True),
+        'fix_within_days_low': ('int', True),
+        'stale_after_months': ('int', True),
+    },
 }
 SHARED_SECTIONS = ('repo', 'limits', 'verify')
 
@@ -73,6 +81,16 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         'ci': False,
     },
     'dependency-upgrades': {'pip_requirements': [], 'pip_sources': [], 'npm_projects': []},
+    # Starting points, to tune per project: how far back a retrospective looks by default, how
+    # fast each severity should be fixed, and how long without a release makes a package stale.
+    'dependency-retrospective': {
+        'period_days': 30,
+        'fix_within_days_critical': 3,
+        'fix_within_days_high': 7,
+        'fix_within_days_medium': 30,
+        'fix_within_days_low': 90,
+        'stale_after_months': 24,
+    },
 }
 
 HINT = (

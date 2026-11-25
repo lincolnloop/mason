@@ -10,7 +10,7 @@ import os
 import shlex
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,7 @@ from . import (
     doctor,
     embed,
     lock,
+    outcomes,
     paths,
     project,
     render,
@@ -71,6 +72,30 @@ def main(argv: list[str] | None = None) -> int:
         '--alerts', type=Path, required=True, help='gh api …/dependabot/alerts --paginate output'
     )
     cmd.add_argument('-o', '--output', type=Path)
+
+    cmd = commands.add_parser(
+        'collect-outcomes', help="what happened to a workflow's PRs and the alerts, as outcomes/2"
+    )
+    cmd.add_argument('project', type=Path, help='project root')
+    cmd.add_argument('--run', type=Path, required=True, help="the collecting run's run.json")
+    cmd.add_argument(
+        '--since', help='start of the period (ISO date or time); default period_days ago'
+    )
+    cmd.add_argument('-o', '--output', type=Path)
+
+    cmd = commands.add_parser(
+        'render-retrospective', help='render outcomes and findings as a report issue body'
+    )
+    cmd.add_argument('outcomes', type=Path, help='collect-outcomes output')
+    cmd.add_argument('--run', type=Path, required=True, help="the run's run.json")
+    cmd.add_argument('--findings', type=Path, nargs='*', default=[], help='the findings files')
+    cmd.add_argument('-o', '--output', type=Path)
+
+    cmd = commands.add_parser(
+        'source',
+        help="clone mason's own repository, at its default branch, to propose a change to it",
+    )
+    cmd.add_argument('directory', type=Path, help='where to clone it; must not exist')
 
     cmd = commands.add_parser(
         'schema', help="print a schema's page: what each field of an artifact means"
@@ -247,6 +272,19 @@ def _validate(args: argparse.Namespace) -> str:
     return f'{args.file}: valid {artifacts[0]["schema"]}\n'
 
 
+def _period(since_arg: str | None, period_days: int) -> tuple[datetime, datetime]:
+    until = datetime.now(UTC)
+    since = until - timedelta(days=period_days)
+    if since_arg:
+        try:
+            since = datetime.fromisoformat(since_arg.replace('Z', '+00:00'))
+        except ValueError as exc:
+            raise Refused(f'--since: {exc}') from exc
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=UTC)
+    return since, until
+
+
 def _render_change(args: argparse.Namespace) -> str:
     (change,) = _load(args.file, schema='change/1')
     (record,) = _load(args.run, schema='run/1')
@@ -310,6 +348,70 @@ def _alerts(args: argparse.Namespace) -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(text, encoding='utf-8')
     print(f'{count} open alerts saved to {args.output}', file=sys.stderr)
+
+
+def _collect_outcomes(args: argparse.Namespace) -> str:
+    (record,) = _load(args.run, schema='run/1')
+    try:
+        config = project.load(args.project, 'dependency-retrospective')
+    except project.ConfigError as exc:
+        raise Refused(str(exc)) from exc
+    settings = config['dependency-retrospective']
+    policy = {
+        'fix_within_days': {
+            s: settings[f'fix_within_days_{s}'] for s in ('critical', 'high', 'medium', 'low')
+        },
+        'stale_after_months': settings['stale_after_months'],
+        'stale_pr_after_days': config['limits']['stale_after_days'],
+    }
+    since, until = _period(args.since, settings['period_days'])
+    repo = config['repo']['name']
+    try:
+        raw_prs = collect.upgrade_prs(repo)
+        alerts = collect.all_alerts(repo)
+        reverted = collect.reverts(args.project, config['repo']['main_branch'], since.isoformat())
+    except (collect.CollectError, ValueError) as exc:
+        raise Refused(str(exc)) from exc
+    packages = [
+        collect.package_health(ecosystem, name, count, collect.fetch_json)
+        for ecosystem, name, count in collect.packages_to_check(alerts, raw_prs)
+    ]
+    result = outcomes.build(
+        repo=repo,
+        run=record,
+        since=since,
+        until=until,
+        policy=policy,
+        raw_prs=raw_prs,
+        alerts=alerts,
+        reverts=reverted,
+        packages=packages,
+    )
+    errors = validate(result)
+    if errors:  # a bug here, not bad input: say so rather than write a broken artifact
+        raise Refused('\n'.join(['the collected outcomes are invalid:', *errors]))
+    return json.dumps(result, indent=2, ensure_ascii=False) + '\n'
+
+
+def _render_retrospective(args: argparse.Namespace) -> str:
+    (collected,) = _load(args.outcomes, schema='outcomes/2')
+    (record,) = _load(args.run, schema='run/1')
+    if collected['run'] != record['id']:
+        raise Refused(f'the outcomes are from run {collected["run"]!r}, not {record["id"]!r}')
+    findings = [f for path in args.findings for f in _load(path, schema='finding/1')]
+    try:
+        return render.retrospective_body(collected, findings, record)
+    except ValueError as exc:
+        raise Refused(str(exc)) from exc
+
+
+def _source(args: argparse.Namespace) -> str:
+    try:
+        url = version.source_url()
+        version.clone(url, args.directory)
+    except version.VersionError as exc:
+        raise Refused(str(exc)) from exc
+    return json.dumps({'dir': str(args.directory), 'url': url}, indent=2) + '\n'
 
 
 SCHEMA_PAGES = Path(__file__).resolve().parent / 'schemas'
@@ -611,7 +713,10 @@ COMMANDS = {
     'render-stopped': _render_stopped,
     'alerts': _alerts,
     'run-start': _run_start,
+    'collect-outcomes': _collect_outcomes,
+    'render-retrospective': _render_retrospective,
     'schema': _schema,
+    'source': _source,
     'extract': _extract,
     'build-assessment': _build_assessment,
     'render-assessment': _render_assessment,

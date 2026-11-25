@@ -79,6 +79,11 @@ class Workflow:
     env: tuple[str, ...] = ()
 
 
+# mason's own checks, run in a clone of it (`mason source`) before a retrospective proposes a
+# change to its skills.
+MASON_CHECKS = ('Bash(uv run --locked python -m unittest *)', 'Bash(ruff *)')
+
+
 WORKFLOWS = {
     # Reads alerts, manifests, issues and PRs, and writes one issue: no build or test tools.
     'dependency-assessment': Workflow(
@@ -89,6 +94,10 @@ WORKFLOWS = {
         task='Run the dependency upgrades for this project',
         # pip_compile and the build commands, as the project configures them.
         tools=('Bash(make *)', 'Bash(npm *)', 'Bash(pip-compile *)'),
+    ),
+    'dependency-retrospective': Workflow(
+        task='Run the dependency retrospective for this project',
+        tools=MASON_CHECKS,
     ),
 }
 

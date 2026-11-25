@@ -10,6 +10,7 @@ that drifts from the code fails the tests.
 | [`finding/1`](finding.md) | every workflow: one per package, error group or observation | the renderer; the person deciding the PR |
 | [`assessment/1`](assessment.md) | `dependency-assessment`, in the month's assessment issue | `dependency-upgrades`; the report's notes on what is still open |
 | [`change/1`](change.md) | `dependency-upgrades`, one per PR | the renderer; the person deciding the PR |
+| [`outcomes/2`](outcomes.md) | `artifact collect-outcomes`, for a retrospective | the `dependency-retrospective` skill; the report |
 | [`run/1`](run.md) | every run, at its start | the renderer; anyone asking who started a PR, or why a run opened none |
 
 ## Shared fields

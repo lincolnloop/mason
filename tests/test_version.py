@@ -53,5 +53,57 @@ class VersionTests(unittest.TestCase):
                 version.automation_sha(self.tmp, direct_url=recorded)
 
 
+class SourceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_a_checkout_uses_its_origin(self) -> None:
+        (self.tmp / '.git').mkdir()
+        url = version.source_url(self.tmp, git=lambda *a: 'git@github.com:o/mason.git')
+        self.assertEqual(url, 'git@github.com:o/mason.git')
+
+    def test_a_checkout_without_origin_is_refused(self) -> None:
+        (self.tmp / '.git').mkdir()
+
+        def no_remote(*args: str) -> str:
+            raise subprocess.CalledProcessError(2, 'git', stderr='No such remote')
+
+        with self.assertRaisesRegex(version.VersionError, 'no origin remote'):
+            version.source_url(self.tmp, git=no_remote)
+
+    def test_an_install_from_git_uses_its_url(self) -> None:
+        recorded = json.dumps(
+            {'url': 'git+https://github.com/o/mason', 'vcs_info': {'vcs': 'git', 'commit_id': SHA}}
+        )
+        self.assertEqual(
+            version.source_url(self.tmp, direct_url=recorded), 'https://github.com/o/mason'
+        )
+
+    def test_an_install_not_from_git_is_refused(self) -> None:
+        for recorded in ('', '{', json.dumps({'url': 'file:///x', 'dir_info': {}})):
+            with self.subTest(recorded=recorded), self.assertRaises(version.VersionError):
+                version.source_url(self.tmp, direct_url=recorded)
+
+    def test_clone(self) -> None:
+        origin = self.tmp / 'origin'
+        subprocess.run(['git', 'init', '-q', '-b', 'main', str(origin)], check=True)
+        identity = ['-c', 'user.name=t', '-c', 'user.email=t@example.com']
+        subprocess.run(
+            ['git', '-C', str(origin), *identity, 'commit', '-q', '--allow-empty', '-m', 'x'],
+            check=True,
+        )
+        target = self.tmp / 'clone'
+        version.clone(str(origin), target)
+        self.assertTrue((target / '.git').is_dir())
+        with self.assertRaisesRegex(version.VersionError, 'already exists'):
+            version.clone(str(origin), target)
+        with self.assertRaisesRegex(version.VersionError, 'git clone .* failed'):
+            version.clone(str(self.tmp / 'missing'), self.tmp / 'other')
+
+
 if __name__ == '__main__':
     unittest.main()

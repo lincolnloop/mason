@@ -3,6 +3,7 @@
 - `finding`: one thing a workflow found.
 - `change`: the pull request it opens.
 - `run`: who started a run, where, and how it ended.
+- `outcomes`: what happened afterwards, for a retrospective.
 - `assessment`: every open alert, and what was decided about it.
 
 Each module has `SCHEMA` (the value of the artifact's `schema` field) and `validate(artifact)`,
@@ -15,6 +16,7 @@ from . import (
     assessment,
     change,
     finding,
+    outcomes,
     run,
 )
 
@@ -22,6 +24,7 @@ VALIDATORS = {
     finding.SCHEMA: finding.validate,
     change.SCHEMA: change.validate,
     run.SCHEMA: run.validate,
+    outcomes.SCHEMA: outcomes.validate,
     assessment.SCHEMA: assessment.validate,
 }
 
