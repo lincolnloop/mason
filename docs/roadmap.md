@@ -101,7 +101,8 @@ A project chooses its workflows, and new ones are added without changing the eng
   `project.SECTIONS` (built).
 - Tool requests and grants (`[grants]`); workflows from other sources (built). Workflows from the
   project's own `.claude/skills/` are still to come.
-- `run/2`, and each result naming the skill's source and version.
+- Each run naming its skill's version and source (built). `run/2` moves to 0.4, where the
+  ledger first needs its fields.
 
 ## 0.3: results and notes
 
@@ -119,7 +120,8 @@ Results kept by mason as the master copy, published wherever the developer choos
 mason owns the schedule, and says what was done, what is due and what was missed.
 `docs/workflows.md` §9 (plan steps 8 and 9).
 
-- Schedules per workflow and project; calendar periods; the ledger.
+- Schedules per workflow and project; calendar periods; the ledger, with `run/2` (its `period`
+  and the `done`, `nothing_to_do`, `failed` and `skipped` outcomes).
 - `mason status`, `due`, `overdue`, `history`, `skip`, `schedule set`.
 - `mason run-due` as a single heartbeat, and `mason schedule install`.
 - Consolidation inputs, for reports built from other reports.

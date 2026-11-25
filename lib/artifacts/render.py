@@ -1224,6 +1224,8 @@ def _run_details(run: dict[str, Any]) -> str:
     skill = produced_by['skill'] + (
         f' {produced_by["skill_version"]}' if 'skill_version' in produced_by else ''
     )
+    if produced_by.get('skill_source', 'installed') != 'installed':
+        skill += f' ({produced_by["skill_source"]})'
     if 'mason_version' in produced_by:
         mason = f'mason {produced_by["mason_version"]} ({sha})'
     else:

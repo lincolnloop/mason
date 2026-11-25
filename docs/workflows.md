@@ -111,7 +111,7 @@ installed workflow is noted, not an error, so uninstalling a workflow doesn't br
 unknown keys within a known section are still errors.
 
 `mason doctor` lists the installed workflow skills and whether each works with this engine;
-their source (from the `npx skills` lock) is still to come.
+each run records where its skill came from (§7).
 
 ## 4. Choosing workflows per project
 
@@ -228,14 +228,16 @@ This proposal defers plugins until a real workflow needs one.
 
 ## 7. Contract changes
 
-- **`run/2`.** `run/1`'s outcomes (`stopped_pr_open`, `alerts_not_covered`) belong to
-  dependency upgrades. `run/2` keeps `pr_opened`, `issue_opened`, `review_posted`, adds
+- **`run/2`** (moved to 0.4, where the schedules and the ledger first read it). `run/1`'s
+  outcomes (`stopped_pr_open`, `alerts_not_covered`) belong to dependency upgrades. `run/2` keeps `pr_opened`, `issue_opened`, `review_posted`, adds
   `discussion_posted` and a generic `stopped` with a `reason` and a link, and moves
   `alerts_not_covered` into the stopping workflow's own comment. Every skill that writes `run/1`
   changes in the same release, as AGENTS.md requires.
-- **Provenance.** `produced_by` records the skill's source and version from the skills lock, not
-  only `automation_sha`. This is the change `packaging.md` §8 already plans; it matters more once
-  skills come from more than one place.
+- **Provenance** (built in 0.2). A run's `produced_by` records the skill's version and where it
+  came from (`skill_source`): `installed`, `global`, `path`, or `mapped`, with the mapped
+  directory's repository and commit when it is in one, never a local path. Additive and
+  optional, so `run/1` is unchanged. Which `npx skills` source an installed skill came from is
+  not recorded yet.
 - **`finding/1` and `change/1`** are close to generic. Their `kind` and classification values
   should be checked for dependency-only terms before third-party workflows rely on them.
 
@@ -555,7 +557,7 @@ Each step can ship by itself. `docs/roadmap.md` places them in releases: steps 1
 | 2 | `[workflows] enabled` and `[skills]`; the per-run skills directory; the prompt names the skill's file (built) | a project runs only what it enables, with the skill its settings choose |
 | 3 | settings declared by skills (`settings.toml`); workflow entries removed from `project.SECTIONS` (built) | none |
 | 4 | tool requests and grants; workflows from other sources (built; from the project itself, not yet) | new workflows without engine changes |
-| 5 | `run/2` and per-skill provenance | published records name the skill's source |
+| 5 | per-skill provenance (built); `run/2` moved to step 8 | published records name the skill's source |
 | 6 | results directory, `save-result`, `mason publish`; `dependency-report` moved to it | reports kept per project, published where settings say |
 | 7 | `mason note` and the `notes` skill | analyses kept per project, out of the project's history |
 | 8 | schedules, periods and the ledger; `mason status`, `due`, `overdue`, `history`, `skip`, `schedule set` | what is done, due and overdue, across projects |

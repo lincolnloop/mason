@@ -881,12 +881,15 @@ def _run_start(args: argparse.Namespace) -> str:
     except project.ConfigError as exc:
         raise Refused(str(exc)) from exc
     try:
-        skill = skills.check_resolved(args.workflow, project.skill_paths(repo))
+        mapping = project.skill_paths(repo)
+        skill = skills.check_resolved(args.workflow, mapping)
     except (skills.SkillError, project.ConfigError) as exc:
         raise Refused(str(exc)) from exc
     versions = {'mason_version': version.package_version()}
-    if skill is not None and skill.version:
-        versions['skill_version'] = skill.version
+    if skill is not None:
+        if skill.version:
+            versions['skill_version'] = skill.version
+        versions['skill_source'] = skills.provenance(args.workflow, skill, mapping)
     directory, record = run.start(
         paths.runs(repo), args.workflow, repo, _version(args).strip(), versions=versions
     )

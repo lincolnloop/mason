@@ -224,6 +224,7 @@ class CliTests(WithoutTheCheckout):
         record = json.loads((Path(json.loads(result.stdout)['dir']) / 'run.json').read_text())
         self.assertEqual(record['produced_by']['skill_version'], '1.2.0')
         self.assertEqual(record['produced_by']['mason_version'], version.package_version())
+        self.assertEqual(record['produced_by']['skill_source'], 'installed')
 
 
 class ProjectSkillTests(WithoutTheCheckout):
@@ -475,6 +476,70 @@ class GrantTests(WithoutTheCheckout):
             project.grants('o/app'), {'code-review': ['Bash(make *)', 'Bash(gh pr merge *)']}
         )
         self.assertEqual(inbox.local_items('o/app', ['code-review'], dict(os.environ)), [])
+
+
+class ProvenanceTests(WithoutTheCheckout):
+    def setUp(self) -> None:
+        super().setUp()
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        super().tearDown()
+        self._tmp.cleanup()
+        shutil.rmtree(paths.data_home(), ignore_errors=True)
+        shutil.rmtree(HOME / '.claude', ignore_errors=True)
+
+    def test_where_an_unmapped_skill_was_found(self) -> None:
+        dirs = skills.directories(dict(os.environ, MASON_SKILLS_PATH=str(self.tmp)))
+        for directory, expected in (
+            (dirs[0], 'installed'),
+            (dirs[2], 'global'),
+            (self.tmp, 'path'),
+        ):
+            with self.subTest(expected=expected):
+                skill = skills.read(install(directory, 'code-review'))
+                env = dict(os.environ, MASON_SKILLS_PATH=str(self.tmp))
+                self.assertEqual(skills.provenance('code-review', skill, {}, env), expected)
+
+    def test_a_mapped_skill_names_its_repository_and_commit(self) -> None:
+        repo = self.tmp / 'team'
+        path = install(repo, 'code-review')
+        mapping = {'code-review': str(path.parent)}
+        skill = skills.read(path)
+        self.assertEqual(skills.provenance('code-review', skill, mapping), 'mapped')  # not git
+        git = ['git', '-C', str(repo), '-c', 'user.name=t', '-c', 'user.email=t@example.com']
+        subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+        subprocess.run([*git, 'add', '.'], check=True)
+        subprocess.run([*git, 'commit', '-q', '-m', 'x'], check=True)
+        sha = subprocess.run(
+            [*git, 'rev-parse', '--short=12', 'HEAD'], capture_output=True, text=True
+        ).stdout.strip()
+        self.assertEqual(
+            skills.provenance('code-review', skill, mapping), f'mapped: a local repository@{sha}'
+        )
+        subprocess.run(
+            [*git, 'remote', 'add', 'origin', 'https://user:t0ken@github.com/acme/skills.git'],
+            check=True,
+        )
+        self.assertEqual(
+            skills.provenance('code-review', skill, mapping),
+            f'mapped: https://github.com/acme/skills.git@{sha}',
+        )
+        path.write_text(path.read_text() + 'changed\n')
+        self.assertTrue(skills.provenance('code-review', skill, mapping).endswith('-dirty'))
+
+    def test_published_with_the_run(self) -> None:
+        from artifacts import render
+
+        from .fixtures import CHANGE, FINDING, RUN, make
+
+        produced_by = {**RUN['produced_by'], 'skill_version': '1.0', 'skill_source': 'mapped'}
+        body = render.change_body(CHANGE, [FINDING], make(RUN, produced_by=produced_by))
+        self.assertIn('dependency-upgrades 1.0 (mapped), mason', body)
+        produced_by['skill_source'] = 'installed'
+        body = render.change_body(CHANGE, [FINDING], make(RUN, produced_by=produced_by))
+        self.assertIn('dependency-upgrades 1.0, mason', body)
 
 
 if __name__ == '__main__':

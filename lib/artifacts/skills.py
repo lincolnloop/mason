@@ -27,6 +27,7 @@ So the workflows are whatever workflow skills are installed: mason keeps no list
 
 import os
 import re
+import subprocess
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -441,3 +442,44 @@ def settings_of(
         if skill is not None and skill.settings is not None:
             found[name] = skill.settings
     return found
+
+
+def provenance(
+    name: str,
+    skill: Skill,
+    mapping: Mapping[str, str] | None = None,
+    env: Mapping[str, str] | None = None,
+) -> str:
+    """Where a run's skill came from, to publish with the run: `installed` (mason's own skills
+    directory), `global`, `path` (MASON_SKILLS_PATH), or `mapped` by the project's settings,
+    with the repository and commit of the mapped directory when it is in one. Never a local path:
+    what is published names the tool, not the machine."""
+    if mapping and name in mapping:
+        return 'mapped' + _git_source(skill.path.parent)
+    dirs = directories(env)
+    parent = skill.path.parent.parent
+    if parent in dirs[:2]:
+        return 'installed'
+    if parent in dirs[2:4]:
+        return 'global'
+    return 'path'
+
+
+def _git_source(directory: Path) -> str:
+    def git(*args: str) -> str | None:
+        try:
+            result = subprocess.run(
+                ['git', '-C', str(directory), *args], capture_output=True, text=True, timeout=10
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return result.stdout.strip() if result.returncode == 0 else None
+
+    commit = git('rev-parse', '--short=12', 'HEAD')
+    if not commit:
+        return ''
+    url = git('remote', 'get-url', 'origin') or ''
+    # Credentials in a remote URL (https://token@host/...) never leave the machine.
+    url = re.sub(r'^(\w+://)[^@/]+@', r'\1', url)
+    dirty = '-dirty' if git('status', '--porcelain', '--', '.') else ''
+    return f': {url or "a local repository"}@{commit}{dirty}'
