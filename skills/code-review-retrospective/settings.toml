@@ -1,0 +1,7 @@
+# This workflow's settings, in [code-review-retrospective] of a project's settings file (see
+# ../dependency-upgrades/settings.toml for the format).
+
+[period_days]
+type = 'int'
+required = true
+default = 30

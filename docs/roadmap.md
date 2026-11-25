@@ -97,7 +97,8 @@ A project chooses its workflows, and new ones are added without changing the eng
   metadata), replacing `runner.WORKFLOWS` (built).
 - A workflow mapped to a skill from any source (`[skills]`); a per-run skills directory; the
   prompt names the skill's file (built).
-- Workflow settings declared by the skill, replacing its entry in `project.SECTIONS`.
+- Workflow settings declared by the skill (`settings.toml`), replacing its entry in
+  `project.SECTIONS` (built).
 - Tool requests and grants; workflows from other sources and from the project itself.
 - `run/2`, and each result naming the skill's source and version.
 

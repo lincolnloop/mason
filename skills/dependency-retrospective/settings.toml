@@ -1,0 +1,34 @@
+# This workflow's settings, in [dependency-retrospective] of a project's settings file (see
+# ../dependency-upgrades/settings.toml for the format). Starting points, to tune per project:
+# how far back a retrospective looks by default, how fast each severity should be fixed, and how
+# long without a release makes a package stale.
+
+[period_days]
+type = 'int'
+required = true
+default = 30
+
+[fix_within_days_critical]
+type = 'int'
+required = true
+default = 3
+
+[fix_within_days_high]
+type = 'int'
+required = true
+default = 7
+
+[fix_within_days_medium]
+type = 'int'
+required = true
+default = 30
+
+[fix_within_days_low]
+type = 'int'
+required = true
+default = 90
+
+[stale_after_months]
+type = 'int'
+required = true
+default = 24

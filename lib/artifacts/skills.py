@@ -27,9 +27,11 @@ So the workflows are whatever workflow skills are installed: mason keeps no list
 
 import os
 import re
+import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from . import paths, version
 
@@ -40,6 +42,84 @@ REQUIREMENT = re.compile(r'^(>=|<=|==|>|<)\s*(\d+(?:\.\d+)*)$')
 
 class SkillError(Exception):
     pass
+
+
+KINDS = {'str': str, 'bool': bool, 'int': int, 'list': list}
+SETTINGS_FILE = 'settings.toml'
+
+
+@dataclass(frozen=True)
+class Setting:
+    """One key of a workflow's settings, as its skill's `settings.toml` declares it."""
+
+    # 'str', 'bool', 'int' (at least 1) or 'list' of strings.
+    kind: str
+    # Whether a run needs a value: from the settings file, detection or the default.
+    required: bool = False
+    default: Any = None
+    # The detector that finds it in the repository (`project.DETECTORS`).
+    detect: str | None = None
+    choices: tuple[str, ...] = ()
+    # Required when this other key has a value.
+    required_with: str | None = None
+
+
+@dataclass(frozen=True)
+class Settings:
+    keys: dict[str, Setting] = field(default_factory=dict)
+    # At least one of these keys must have a value, and the hint says what that means.
+    one_of: tuple[str, ...] = ()
+    one_of_hint: str = ''
+
+
+def parse_settings(text: str) -> Settings:
+    """A skill's `settings.toml`, checked."""
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise SkillError(f'is not valid TOML: {exc}') from exc
+    one_of = data.pop('one_of', [])
+    hint = data.pop('one_of_hint', '')
+    if not isinstance(one_of, list) or not all(isinstance(k, str) for k in one_of):
+        raise SkillError('one_of: must be a list of keys')
+    keys = {}
+    for name, spec in data.items():
+        if not isinstance(spec, dict):
+            raise SkillError(f'{name}: must be a table, with at least `type`')
+        unknown = set(spec) - {'type', 'required', 'default', 'detect', 'choices', 'required_with'}
+        if unknown:
+            raise SkillError(f'{name}: unknown {", ".join(sorted(unknown))}')
+        kind = spec.get('type')
+        if kind not in KINDS:
+            raise SkillError(f'{name}: type must be one of {", ".join(KINDS)}, got {kind!r}')
+        default = spec.get('default')
+        if default is not None and not _is(kind, default):
+            raise SkillError(f'{name}: default {default!r} is not a {kind}')
+        choices = spec.get('choices', [])
+        if choices and (kind != 'str' or not all(isinstance(c, str) for c in choices)):
+            raise SkillError(f'{name}: choices are for a str key, as a list of strings')
+        keys[name] = Setting(
+            kind=kind,
+            required=bool(spec.get('required', False)),
+            default=default,
+            detect=spec.get('detect'),
+            choices=tuple(choices),
+            required_with=spec.get('required_with'),
+        )
+    for name, setting in keys.items():
+        if setting.required_with is not None and setting.required_with not in keys:
+            raise SkillError(f'{name}: required_with names no key {setting.required_with!r}')
+    if missing := [k for k in one_of if k not in keys]:
+        raise SkillError(f'one_of names no key {", ".join(missing)}')
+    return Settings(keys, tuple(one_of), hint)
+
+
+def _is(kind: str, value: Any) -> bool:
+    if kind == 'list':
+        return isinstance(value, list) and all(isinstance(v, str) for v in value)
+    if kind == 'int':
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 1
+    return isinstance(value, KINDS[kind])
 
 
 @dataclass(frozen=True)
@@ -155,6 +235,8 @@ class Skill:
     requires: str | None
     # Set when the skill declares itself a workflow (`mason-task`).
     workflow: Workflow | None = None
+    # Its settings, from `settings.toml` beside it; None when it has none.
+    settings: Settings | None = None
 
     def problem(self, engine: str) -> str | None:
         """Why this skill can't run with this mason, or None."""
@@ -186,12 +268,20 @@ def read(path: Path) -> Skill:
         workflow = _workflow(metadata)
     except SkillError as exc:
         raise SkillError(f'{path}: {exc}') from exc
+    settings_path = path.parent / SETTINGS_FILE
+    settings = None
+    if settings_path.is_file():
+        try:
+            settings = parse_settings(settings_path.read_text(encoding='utf-8'))
+        except SkillError as exc:
+            raise SkillError(f'{settings_path}: {exc}') from exc
     return Skill(
         name=str(data.get('name') or path.parent.name),
         path=path,
         version=skill_version if isinstance(skill_version, str) else None,
         requires=metadata.get('mason-requires'),
         workflow=workflow,
+        settings=settings,
     )
 
 
@@ -332,3 +422,22 @@ def stage(
         link.symlink_to(skill.path.parent.resolve(), target_is_directory=True)
         pending += SIBLING.findall(skill.path.read_text(encoding='utf-8'))
     return skills_dir / name / 'SKILL.md'
+
+
+def settings_of(
+    mapping: Mapping[str, str] | None = None, env: Mapping[str, str] | None = None
+) -> dict[str, Settings]:
+    """workflow -> the settings its skill declares, for the skills a project runs (installed,
+    or mapped by its settings). A skill whose mapping is broken is left out: `mason run` and
+    `mason inbox` report it."""
+    found = {}
+    # A mapping that isn't a path is the settings checker's to report, not this one's.
+    mapping = {k: v for k, v in (mapping or {}).items() if isinstance(v, str)}
+    for name in sorted({*workflows(env), *mapping}):
+        try:
+            skill = resolve(name, mapping, env)
+        except SkillError:
+            continue
+        if skill is not None and skill.settings is not None:
+            found[name] = skill.settings
+    return found

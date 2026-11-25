@@ -1,0 +1,13 @@
+# This workflow's settings, in [sentry-retrospective] of a project's settings file (see
+# ../dependency-upgrades/settings.toml for the format).
+
+[period_days]
+type = 'int'
+required = true
+default = 30
+
+# Allowed between a merge and its deploy, before an event counts against the fix.
+[deploy_grace_hours]
+type = 'int'
+required = true
+default = 24

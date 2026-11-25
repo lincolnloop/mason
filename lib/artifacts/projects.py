@@ -204,7 +204,7 @@ def plan(
     resolved.file_path = settings
     missing = {}
     for name in workflows:
-        if name in project.SECTIONS:
+        if name in resolved.schema:
             try:
                 project.require(resolved, name)
             except project.ConfigError as exc:

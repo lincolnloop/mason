@@ -1,0 +1,22 @@
+# This workflow's settings, in [code-review] of a project's settings file (see
+# ../dependency-upgrades/settings.toml for the format).
+
+# The project's own knowledge skills to load, e.g. framework rules.
+[knowledge]
+type = 'list'
+required = true
+default = []
+
+# The project's own conventions: documents in the repository, read as its rules.
+[conventions]
+type = 'list'
+required = true
+default = []
+detect = 'conventions'
+
+# Which findings are posted as inline comments. One consolidated review comment by default.
+[inline]
+type = 'str'
+required = true
+default = 'none'
+choices = ['none', 'suggestions', 'all']

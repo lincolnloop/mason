@@ -1,0 +1,48 @@
+# This workflow's settings, in [sentry-errors] of a project's settings file (see
+# ../dependency-upgrades/settings.toml for the format). The organisation and project can't be
+# detected: they are set in the file.
+
+[sentry_org]
+type = 'str'
+required = true
+
+[sentry_project]
+type = 'str'
+required = true
+
+[sentry_url]
+type = 'str'
+required = true
+default = 'https://sentry.io'
+
+[environments]
+type = 'list'
+required = true
+default = ['production']
+
+[period_days]
+type = 'int'
+required = true
+default = 14
+
+# Paths whose stack frames are this project's code; the rest are libraries.
+[trace_path_prefixes]
+type = 'list'
+required = true
+default = []
+
+# Other repositories a fix may belong in, such as infrastructure configuration.
+[related_repos]
+type = 'list'
+required = true
+default = []
+
+# The project's test command, if not its AGENTS.md's.
+[verify]
+type = 'list'
+
+# How long after a fix is merged its errors must stay quiet to count as fixed.
+[quiet_after_days]
+type = 'int'
+required = true
+default = 14

@@ -1,0 +1,39 @@
+# This workflow's settings, in [dependency-upgrades] of a project's settings file. mason reads
+# this file (lib/artifacts/skills.py): each table is a key, with its type ('str', 'bool', 'int'
+# or 'list' of strings), whether a run needs a value, its default, and the detector that finds it
+# in the repository (lib/artifacts/project.py, DETECTORS).
+
+# One of these must be found or set: there is nothing to upgrade otherwise.
+one_of = ['pip_requirements', 'npm_projects']
+one_of_hint = 'found no compiled requirements files or npm lockfiles'
+
+[pip_requirements]
+type = 'list'
+required = true
+default = []
+detect = 'pip_requirements'
+
+[pip_sources]
+type = 'list'
+required = true
+default = []
+detect = 'pip_sources'
+
+[pip_compile]
+type = 'str'
+detect = 'pip_compile'
+required_with = 'pip_requirements'
+
+[npm_projects]
+type = 'list'
+required = true
+default = []
+detect = 'npm_projects'
+
+[npm_build]
+type = 'str'
+detect = 'npm_build'
+
+# The project's test command, if not its AGENTS.md's.
+[verify]
+type = 'list'

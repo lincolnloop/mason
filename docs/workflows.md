@@ -45,7 +45,7 @@ So:
 
 ## 3. Declaring a workflow
 
-*Built in 0.2 (plan step 1), except settings (step 3).*
+*Built in 0.2 (plan steps 1 and 3).*
 
 Each workflow skill declares itself in its frontmatter's `metadata`, the open SKILL.md format's
 map of strings, so other agents ignore it and the skill stays agent-neutral. Since the values
@@ -80,22 +80,35 @@ The workflows are whatever workflow skills are installed: mason keeps no list of
 first copy of a skill in the order a session loads them wins: mason's own skills directory, then
 the global ones, then `MASON_SKILLS_PATH` (a checkout's `skills/`, for the tests).
 
-**Settings (step 3)** don't fit a map of strings. They go in a file beside the skill,
-`skills/<name>/settings.toml`, which installs with it:
+**Settings** don't fit a map of strings. They go in a file beside the skill,
+`skills/<name>/settings.toml`, which installs with it, and are the workflow's section of a
+project's settings file:
 
 ```toml
-[sentry_org]
-type = 'str'
-required = true
+one_of = ['pip_requirements', 'npm_projects']      # at least one must have a value
+one_of_hint = 'found no compiled requirements files or npm lockfiles'
 
-[environments]
-type = 'list'
-default = ['production']
+[pip_requirements]
+type = 'list'          # 'str', 'bool', 'int' (at least 1) or 'list' of strings
+required = true        # a run needs a value: from the file, detection or the default
+default = []
+detect = 'pip_requirements'
+
+[pip_compile]
+type = 'str'
+required_with = 'pip_requirements'
+
+[inline]
+type = 'str'
+default = 'none'
+choices = ['none', 'suggestions', 'all']
 ```
 
-That replaces the workflow's entry in `project.SECTIONS`. The shared sections (`repo`, `limits`,
-`verify`) and the detection in `detect.py` stay in the engine. A skill whose settings can be
-detected names the detector (`detect = 'pip_requirements'`) rather than shipping code.
+The engine keeps only its own sections (`workflows`, `skills`, `project`, `repo`, `limits`,
+`verify`) and the detectors. A setting the repository can tell names its detector
+(`project.DETECTORS`) rather than shipping code. A section in a project's settings for no
+installed workflow is noted, not an error, so uninstalling a workflow doesn't break the file;
+unknown keys within a known section are still errors.
 
 `mason doctor` lists the installed workflow skills and whether each works with this engine;
 their source (from the `npx skills` lock) is still to come.
@@ -529,7 +542,7 @@ Each step can ship by itself. `docs/roadmap.md` places them in releases: steps 1
 |---|---|---|
 | 1 | `mason-*` metadata in mason's skills; the engine reads it; `runner.WORKFLOWS` removed (built) | none |
 | 2 | `[workflows] enabled` and `[skills]`; the per-run skills directory; the prompt names the skill's file (built) | a project runs only what it enables, with the skill its settings choose |
-| 3 | settings declared by skills; workflow entries removed from `project.SECTIONS` | none |
+| 3 | settings declared by skills (`settings.toml`); workflow entries removed from `project.SECTIONS` (built) | none |
 | 4 | tool requests and grants; workflows from other sources and from the project | new workflows without engine changes |
 | 5 | `run/2` and per-skill provenance | published records name the skill's source |
 | 6 | results directory, `save-result`, `mason publish`; `dependency-report` moved to it | reports kept per project, published where settings say |

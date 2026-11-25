@@ -1,0 +1,29 @@
+# This workflow's settings, in [dependency-report] of a project's settings file (see
+# ../dependency-upgrades/settings.toml for the format).
+
+# The Discussions category the monthly report is published in.
+[category]
+type = 'str'
+required = true
+default = 'Dependency reports'
+
+# Manifest globs for where each vulnerable package is. None set: Dependabot's guess.
+[production]
+type = 'list'
+required = true
+default = []
+
+[production_build]
+type = 'list'
+required = true
+default = []
+
+[development]
+type = 'list'
+required = true
+default = []
+
+[not_deployed]
+type = 'list'
+required = true
+default = []

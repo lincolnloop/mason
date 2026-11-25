@@ -38,8 +38,9 @@ CONFIG_VERSION = 1
 UPGRADE_HINTS: dict[int, str] = {}
 EXAMPLE = 'mason.toml.example in the mason repository'
 
-# section -> {key: (kind, required)}; kind is 'str', 'bool', 'int', or 'list' (of strings).
-# `required` applies to the resolved value, never to the file.
+# The sections the engine itself reads: section -> {key: (kind, required)}; kind is 'str',
+# 'bool', 'int', or 'list' (of strings). `required` applies to the resolved value, never to the
+# file. Each workflow's own section is declared by its skill (`settings.toml`, skills.py).
 SECTIONS: dict[str, dict[str, tuple[str, bool]]] = {
     # The workflows the developer runs on this project. Unset: every workflow.
     'workflows': {'enabled': ('list', False)},
@@ -52,59 +53,6 @@ SECTIONS: dict[str, dict[str, tuple[str, bool]]] = {
         'reason': ('str', False),
         'worktree_copy': ('list', True),
         'ci': ('bool', True),
-    },
-    'dependency-upgrades': {
-        'pip_requirements': ('list', True),
-        'pip_sources': ('list', True),
-        'pip_compile': ('str', False),
-        'npm_projects': ('list', True),
-        'npm_build': ('str', False),
-        'verify': ('list', False),
-    },
-    'code-review': {
-        # The project's own knowledge skills to load, e.g. framework rules.
-        'knowledge': ('list', True),
-        # The project's own conventions: documents in the repository, read as its rules.
-        'conventions': ('list', True),
-        # Which findings are posted as inline comments: none, suggestions, or all.
-        'inline': ('str', True),
-    },
-    'code-review-retrospective': {'period_days': ('int', True)},
-    'sentry-errors': {
-        'sentry_org': ('str', True),
-        'sentry_project': ('str', True),
-        'sentry_url': ('str', True),
-        'environments': ('list', True),
-        'period_days': ('int', True),
-        # Paths whose stack frames are this project's code; the rest are libraries.
-        'trace_path_prefixes': ('list', True),
-        # Other repositories a fix may belong in, such as infrastructure configuration.
-        'related_repos': ('list', True),
-        'verify': ('list', False),
-        # How long after a fix is merged its errors must stay quiet to count as fixed.
-        'quiet_after_days': ('int', True),
-    },
-    'sentry-retrospective': {
-        'period_days': ('int', True),
-        # Allowed between a merge and its deploy, before an event counts against the fix.
-        'deploy_grace_hours': ('int', True),
-    },
-    'dependency-report': {
-        # The Discussions category the monthly report is published in.
-        'category': ('str', True),
-        # Manifest globs for where each vulnerable package is. None set: Dependabot's guess.
-        'production': ('list', True),
-        'production_build': ('list', True),
-        'development': ('list', True),
-        'not_deployed': ('list', True),
-    },
-    'dependency-retrospective': {
-        'period_days': ('int', True),
-        'fix_within_days_critical': ('int', True),
-        'fix_within_days_high': ('int', True),
-        'fix_within_days_medium': ('int', True),
-        'fix_within_days_low': ('int', True),
-        'stale_after_months': ('int', True),
     },
 }
 SHARED_SECTIONS = ('repo', 'limits', 'verify')
@@ -120,37 +68,6 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # Whether CI runs the tests on every pull request, so a run that can't test locally can
         # leave them to CI.
         'ci': False,
-    },
-    'dependency-upgrades': {'pip_requirements': [], 'pip_sources': [], 'npm_projects': []},
-    # One consolidated review comment; inline comments only when a project asks for them.
-    'code-review': {'knowledge': [], 'conventions': [], 'inline': 'none'},
-    'code-review-retrospective': {'period_days': 30},
-    # The org and project can't be detected: they are set in the file.
-    'sentry-errors': {
-        'sentry_url': 'https://sentry.io',
-        'environments': ['production'],
-        'period_days': 14,
-        'trace_path_prefixes': [],
-        'related_repos': [],
-        'quiet_after_days': 14,
-    },
-    'sentry-retrospective': {'period_days': 30, 'deploy_grace_hours': 24},
-    'dependency-report': {
-        'category': 'Dependency reports',
-        'production': [],
-        'production_build': [],
-        'development': [],
-        'not_deployed': [],
-    },
-    # Starting points, to tune per project: how far back a retrospective looks by default, how
-    # fast each severity should be fixed, and how long without a release makes a package stale.
-    'dependency-retrospective': {
-        'period_days': 30,
-        'fix_within_days_critical': 3,
-        'fix_within_days_high': 7,
-        'fix_within_days_medium': 30,
-        'fix_within_days_low': 90,
-        'stale_after_months': 24,
     },
 }
 
@@ -175,6 +92,8 @@ class Resolved:
     # The settings file this project's values are read from, or would be: None when the
     # project's repository can't be detected.
     file_path: Path | None = None
+    # What each section may hold: the engine's sections and the workflows' (`schema`).
+    schema: dict[str, skills.Settings] = field(default_factory=dict)
 
 
 def settings_path(project: Path, env: Mapping[str, str] | None = None) -> Path | None:
@@ -232,7 +151,8 @@ def _read(path: Path) -> dict[str, Any]:
             f'{path}: {problem}; this mason reads version {CONFIG_VERSION}. Set '
             f'`version = {CONFIG_VERSION}` as the first setting (see {EXAMPLE}).'
         )
-    errors = check(config)
+    mapping = config.get('skills') if isinstance(config.get('skills'), dict) else None
+    errors = check(config, (), schema(mapping))
     if errors:
         raise ConfigError(
             '\n'.join([f'{path}: {len(errors)} error(s)', *(f'- {e}' for e in errors)])
@@ -252,18 +172,44 @@ def detected(project: Path) -> dict[str, dict[str, tuple[Any, str]]]:
         found['verify']['worktree_copy'] = (copy, 'an untracked .env that git ignores')
     if ci := detect.ci_config(files):
         found['verify']['ci'] = (True, f'{ci} runs on pull requests')
-    if conventions := detect.conventions(files):
-        found['code-review'] = {'conventions': (conventions, 'a tracked conventions document')}
-    how = {
-        'pip_requirements': 'tracked .txt files with a pip-compile header',
-        'pip_sources': 'the .in file beside each compiled file',
-        'pip_compile': "the command in the compiled files' headers",
-        'npm_projects': 'directories with a tracked package-lock.json',
-        'npm_build': 'a package.json with a build script; skip directories without one',
-    }
-    upgrades = detect.pip(project, files) | detect.npm(project, files)
-    found['dependency-upgrades'] = {key: (value, how[key]) for key, value in upgrades.items()}
     return found
+
+
+# What a workflow's settings can name as `detect`: detector -> how it finds its value.
+DETECTORS = {
+    'pip_requirements': 'tracked .txt files with a pip-compile header',
+    'pip_sources': 'the .in file beside each compiled file',
+    'pip_compile': "the command in the compiled files' headers",
+    'npm_projects': 'directories with a tracked package-lock.json',
+    'npm_build': 'a package.json with a build script; skip directories without one',
+    'conventions': 'a tracked conventions document',
+}
+
+
+def detected_values(project: Path) -> dict[str, tuple[Any, str]]:
+    """detector -> (value, how it was detected), for the values the repository says."""
+    files = detect.tracked_files(project)
+    values = detect.pip(project, files) | detect.npm(project, files)
+    if conventions := detect.conventions(files):
+        values['conventions'] = conventions
+    return {name: (value, DETECTORS[name]) for name, value in values.items()}
+
+
+def schema(
+    mapping: Mapping[str, str] | None = None, env: Mapping[str, str] | None = None
+) -> dict[str, skills.Settings]:
+    """section -> what it may hold: the engine's own sections, then each workflow's, from the
+    skills the project runs (installed, or mapped by its `[skills]`)."""
+    shared = {
+        section: skills.Settings(
+            {
+                key: skills.Setting(kind, required, DEFAULTS.get(section, {}).get(key))
+                for key, (kind, required) in keys.items()
+            }
+        )
+        for section, keys in SECTIONS.items()
+    }
+    return shared | skills.settings_of(mapping, env)
 
 
 def resolve(project: Path, env: Mapping[str, str] | None = None) -> Resolved:
@@ -272,26 +218,34 @@ def resolve(project: Path, env: Mapping[str, str] | None = None) -> Resolved:
     Only types and unknown keys are checked here; `require` checks completeness."""
     file_config, source, notes = read_file(project, env)
     found = detected(project)
+    by_detector = detected_values(project)
+    sections = schema(file_config.get('skills'), env)
     resolved = Resolved(
         config={},
         file_exists=source is not None,
         file_path=source or settings_path(project, env),
         notes=list(notes),
+        schema=sections,
     )
-    for section, keys in SECTIONS.items():
+    for section, settings in sections.items():
         values: dict[str, Any] = {}
-        for key in keys:
+        for key, setting in settings.keys.items():
             if key in file_config.get(section, {}):
                 values[key] = file_config[section][key]
                 resolved.sources[(section, key)] = 'file'
             elif key in found.get(section, {}):
                 values[key], how = found[section][key]
                 resolved.sources[(section, key)] = f'detected: {how}'
-            elif key in DEFAULTS.get(section, {}):
-                values[key] = DEFAULTS[section][key]
+            elif setting.detect in by_detector:
+                values[key], how = by_detector[setting.detect]
+                resolved.sources[(section, key)] = f'detected: {how}'
+            elif setting.default is not None:
+                values[key] = setting.default
                 resolved.sources[(section, key)] = 'default'
         if values or section in file_config:
             resolved.config[section] = values
+    for section in sorted(set(file_config) - set(sections) - {'skills'}):
+        resolved.notes.append(f'[{section}] is for no installed workflow, so it is not read')
     for path in detect.unsupported_lockfiles(detect.tracked_files(project)):
         resolved.notes.append(f'{path}: not read; dependency-upgrades supports pip-compile and npm')
     return resolved
@@ -299,10 +253,11 @@ def resolve(project: Path, env: Mapping[str, str] | None = None) -> Resolved:
 
 def require(resolved: Resolved, section: str | None = None) -> None:
     """Raise ConfigError unless the shared sections, and `section` if given, are complete."""
-    if section is not None and section not in SECTIONS:
-        raise ConfigError(f'no such section [{section}] (known: {", ".join(SECTIONS)})')
+    sections = resolved.schema or schema()
+    if section is not None and section not in sections:
+        raise ConfigError(f'no such section [{section}] (known: {", ".join(sections)})')
     needed = (*SHARED_SECTIONS, *((section,) if section else ()))
-    errors = check(resolved.config, needed)
+    errors = check(resolved.config, needed, sections)
     if errors:
         notes = [f'Note: {note}' for note in resolved.notes]
         raise ConfigError(
@@ -316,58 +271,67 @@ def load(project: Path, section: str | None = None) -> dict[str, Any]:
     return resolved.config
 
 
-def check(config: dict[str, Any], required_sections: tuple[str, ...] = ()) -> list[str]:
-    """Check types and unknown keys everywhere; completeness only in `required_sections`."""
+def check(
+    config: dict[str, Any],
+    required_sections: tuple[str, ...] = (),
+    sections: Mapping[str, skills.Settings] | None = None,
+) -> list[str]:
+    """Check types, choices and unknown keys in every known section; completeness only in
+    `required_sections`. `sections` defaults to the engine's and the installed workflows'. A
+    section for no known workflow isn't checked: `resolve` notes it."""
+    sections = (
+        schema(config.get('skills') if isinstance(config.get('skills'), dict) else None)
+        if sections is None
+        else sections
+    )
     checker = Checker()
-    optional = [s for s in SECTIONS if s not in required_sections] + ['skills']
-    checker.object(config, '$', required_sections, optional)
+    if not isinstance(config, Mapping):
+        checker.error('$', 'must be an object')
+        return checker.errors
+    for name in required_sections:
+        if name not in config:
+            checker.error(f'$.{name}', 'is required')
     # workflow name -> the directory of the skill this project runs for it.
     mapped = config.get('skills')
     if 'skills' in config and checker.object(mapped, '$.skills', (), tuple(mapped or ())):
         for name, value in mapped.items():
             checker.string(value, f'$.skills.{name}')
     for name, section in config.items():
-        keys = SECTIONS.get(name)
-        if keys is None:
+        settings = sections.get(name)
+        if settings is None:
             continue
+        keys = settings.keys
         path = f'$.{name}'
-        required = [k for k, (_, needed) in keys.items() if needed and name in required_sections]
+        complete = name in required_sections
+        required = [k for k, setting in keys.items() if setting.required and complete]
         if not checker.object(section, path, required, [k for k in keys if k not in required]):
             continue
         for key, value in section.items():
             if key not in keys:
                 continue
-            kind = keys[key][0]
-            where = f'{path}.{key}'
-            if kind == 'str':
+            setting, where = keys[key], f'{path}.{key}'
+            if setting.kind == 'str':
                 checker.string(value, where)
-            elif kind == 'bool':
+                if setting.choices and isinstance(value, str) and value not in setting.choices:
+                    checker.error(where, f'must be one of {", ".join(setting.choices)}')
+            elif setting.kind == 'bool':
                 checker.boolean(value, where)
-            elif kind == 'int':
+            elif setting.kind == 'int':
                 checker.integer(value, where, minimum=1)
             else:
                 checker.string_array(value, where)
+        if not complete:
+            continue
+        if settings.one_of and not any(section.get(k) for k in settings.one_of):
+            hint = f'{settings.one_of_hint}; ' if settings.one_of_hint else ''
+            checker.error(path, f'{hint}set {" or ".join(settings.one_of)}')
+        for key, setting in keys.items():
+            other = setting.required_with
+            if other and section.get(other) and not section.get(key):
+                checker.error(f'{path}.{key}', f'is required with {other}')
     repo = config.get('repo')
     if isinstance(repo, dict) and isinstance(repo.get('name'), str):
         checker.string(repo['name'], '$.repo.name', pattern=REPO_PATTERN, pattern_hint='owner/repo')
-    review = config.get('code-review')
-    if isinstance(review, dict) and review.get('inline') not in (
-        None,
-        'none',
-        'suggestions',
-        'all',
-    ):
-        checker.error('$.code-review.inline', 'must be none, suggestions or all')
-    upgrades = config.get('dependency-upgrades')
-    if 'dependency-upgrades' in required_sections and isinstance(upgrades, dict):
-        if not upgrades.get('pip_requirements') and not upgrades.get('npm_projects'):
-            checker.error(
-                '$.dependency-upgrades',
-                'found no compiled requirements files or npm lockfiles; set pip_requirements or '
-                'npm_projects',
-            )
-        if upgrades.get('pip_requirements') and not upgrades.get('pip_compile'):
-            checker.error('$.dependency-upgrades.pip_compile', 'is required with pip_requirements')
     return checker.errors
 
 

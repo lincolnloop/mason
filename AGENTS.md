@@ -9,8 +9,9 @@ install`) and the skills with `npx skills add -g` (`docs/packaging.md`), so:
 - **Nothing project-specific in a skill.** Repository names, paths, commands and labels come
   from `mason config`: the developer's optional settings file for the project, over
   values detected from the repository and defaults (`docs/design.md` §5). If a skill needs a
-  value that isn't in the configuration, add it to `lib/artifacts/project.py`, with detection or
-  a default where one is safe, rather than hard-coding it.
+  value that isn't in the configuration, declare it in the skill's own `settings.toml`, with a
+  default where one is safe, rather than hard-coding it. A value the repository can tell needs
+  a detector in `lib/artifacts/project.py` (`DETECTORS`), which the setting names.
 - **The code is one Python 3.12 package, `artifacts`, run as the `mason` command:** installed as
   a uv tool, or `uv run mason` from a checkout (`pyproject.toml`, `uv.lock`). It must not import
   from a consuming repo. Dependencies are declared and locked; ask before adding one, and prefer

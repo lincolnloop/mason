@@ -48,10 +48,12 @@ class FileCheckTests(unittest.TestCase):
         self.assertEqual(project.check({}), [])
         self.assertEqual(project.check({'limits': {'open_agent_prs': 5}}), [])
 
-    def test_unknown_sections_and_keys(self) -> None:
+    def test_unknown_keys_and_sections(self) -> None:
         errors = project.check(example(deploy={}, limits={'open_agent_prs': 3, 'max_prs': 1}))
-        self.assertTrue(any(e.startswith('$.deploy: is not a known field') for e in errors))
         self.assertTrue(any(e.startswith('$.limits.max_prs: is not a known field') for e in errors))
+        # A section for no installed workflow isn't an error: uninstalling one mustn't break the
+        # file. resolve() notes it instead.
+        self.assertFalse(any(e.startswith('$.deploy') for e in errors))
 
     def test_types(self) -> None:
         errors = project.check({'limits': {'open_agent_prs': '3'}, 'verify': {'exclusive': 'yes'}})
@@ -279,6 +281,24 @@ class ResolveTests(unittest.TestCase):
         self.settings('version = 1\n[limits]\nopen_agent_prs = 2\n')
         self.git('remote', 'set-url', 'origin', 'git@github.com:owner/other.git')
         self.assertFalse(project.resolve(self.repo).file_exists)
+
+    def test_a_section_for_no_installed_workflow_is_noted(self) -> None:
+        self.settings('version = 1\n[billing-reconcile]\nperiod = 3\n')
+        resolved = project.resolve(self.repo)
+        self.assertIn(
+            '[billing-reconcile] is for no installed workflow, so it is not read', resolved.notes
+        )
+        self.assertNotIn('billing-reconcile', resolved.config)
+
+    def test_choices_and_required_with_come_from_the_skill(self) -> None:
+        errors = project.check({'code-review': {'inline': 'some'}})
+        self.assertIn('$.code-review.inline: must be one of none, suggestions, all', errors)
+        errors = project.check(
+            {'dependency-upgrades': {'pip_requirements': ['r.txt']}}, ('dependency-upgrades',)
+        )
+        self.assertIn(
+            '$.dependency-upgrades.pip_compile: is required with pip_requirements', errors
+        )
 
     def test_conventions_document_is_detected(self) -> None:
         self.assertEqual(project.resolve(self.repo).config['code-review']['conventions'], [])

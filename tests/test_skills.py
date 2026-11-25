@@ -301,6 +301,24 @@ class ProjectSkillTests(WithoutTheCheckout):
         path.write_text("version = 1\n[skills]\ncode-review = '~/team/code-review'\n")
         self.assertEqual(project.skill_paths('o/app'), {'code-review': '~/team/code-review'})
 
+    def test_a_mapped_workflow_brings_its_settings(self) -> None:
+        mine = install(self.tmp / 'team', 'billing-reconcile').parent
+        (mine / 'settings.toml').write_text(
+            "[period_days]\ntype = 'int'\nrequired = true\ndefault = 7\n"
+        )
+        project_dir = self.tmp / 'app'
+        subprocess.run(['git', 'init', '-q', str(project_dir)], check=True)
+        git = ['git', '-C', str(project_dir)]
+        subprocess.run([*git, 'remote', 'add', 'origin', 'git@github.com:o/app.git'], check=True)
+        path = paths.settings('o/app')
+        path.parent.mkdir(parents=True)
+        path.write_text(f"version = 1\n[skills]\nbilling-reconcile = '{mine}'\n")
+        resolved = project.resolve(project_dir)
+        self.assertEqual(resolved.config['billing-reconcile'], {'period_days': 7})
+        path.write_text(path.read_text() + "[billing-reconcile]\nperiod_days = 'x'\n")
+        with self.assertRaisesRegex(project.ConfigError, 'period_days: must be an integer'):
+            project.resolve(project_dir)
+
     def test_run_uses_the_mapped_skill(self) -> None:
         install(self.installed, 'code-review')
         mine = install(self.tmp / 'team', 'code-review').parent
@@ -325,6 +343,43 @@ class ProjectSkillTests(WithoutTheCheckout):
         self.assertEqual(result.returncode, 0, result.stderr)
         (session,) = (paths.project_state('o/app') / 'sessions').iterdir()
         self.assertEqual((session / '.claude' / 'skills' / 'code-review').resolve(), mine.resolve())
+
+
+class SettingsTests(unittest.TestCase):
+    def test_every_workflow_skill_declares_readable_settings(self) -> None:
+        for path in sorted((ROOT / 'skills').glob('*/settings.toml')):
+            with self.subTest(skill=path.parent.name):
+                settings = skills.parse_settings(path.read_text())
+                self.assertTrue(settings.keys)
+                for setting in settings.keys.values():
+                    if setting.detect:
+                        self.assertIn(setting.detect, project.DETECTORS)
+
+    def test_a_declaration(self) -> None:
+        settings = skills.parse_settings(
+            "one_of = ['a', 'b']\none_of_hint = 'nothing'\n"
+            "[a]\ntype = 'list'\nrequired = true\ndefault = []\ndetect = 'conventions'\n"
+            "[b]\ntype = 'str'\nchoices = ['x', 'y']\nrequired_with = 'a'\n"
+        )
+        self.assertEqual(settings.one_of, ('a', 'b'))
+        self.assertEqual(settings.keys['a'], skills.Setting('list', True, [], 'conventions'))
+        self.assertEqual(settings.keys['b'].choices, ('x', 'y'))
+
+    def test_malformed(self) -> None:
+        for text, message in (
+            ('[a\n', 'not valid TOML'),
+            ('a = 1\n', 'must be a table'),
+            ("[a]\ntype = 'list'\nhelp = 'x'\n", 'unknown help'),
+            ("[a]\ntype = 'float'\n", 'type must be one of'),
+            ("[a]\ntype = 'int'\ndefault = 0\n", 'is not a int'),
+            ("[a]\ntype = 'list'\ndefault = [1]\n", 'is not a list'),
+            ("[a]\ntype = 'list'\nchoices = ['x']\n", 'choices are for a str key'),
+            ("[a]\ntype = 'str'\nrequired_with = 'b'\n", "names no key 'b'"),
+            ("one_of = ['b']\n[a]\ntype = 'str'\n", 'one_of names no key b'),
+            ("one_of = 'a'\n[a]\ntype = 'str'\n", 'must be a list'),
+        ):
+            with self.subTest(text=text), self.assertRaisesRegex(skills.SkillError, message):
+                skills.parse_settings(text)
 
 
 if __name__ == '__main__':
