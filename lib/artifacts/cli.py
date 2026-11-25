@@ -377,7 +377,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = action.add_parser('list', help='list the installed skills')
     sub.add_argument('--global', dest='everywhere', action='store_true')
 
-    cmd = commands.add_parser('project', help='add a project you look after with mason')
+    cmd = commands.add_parser(
+        'project', help='add, list, archive or remove the projects you look after'
+    )
     action = cmd.add_subparsers(dest='action', required=True)
     sub = action.add_parser(
         'add',
@@ -394,6 +396,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub.add_argument('--yes', action='store_true', help='ask nothing')
     sub.add_argument('--dry-run', action='store_true', help='say what it would do; write nothing')
+    action.add_parser('list', help='each project, its workflows, and when each last ran here')
+    sub = action.add_parser(
+        'archive', help='stop its runs, keeping its settings, clone, runs and logs'
+    )
+    sub.add_argument('repo', help='owner/name')
+    sub.add_argument('--undo', action='store_true', help='run it again')
+    sub = action.add_parser(
+        'remove', help='delete its settings, clone, runs and logs; nothing on GitHub changes'
+    )
+    sub.add_argument('repo', help='owner/name')
+    sub.add_argument('--yes', action='store_true', help='ask nothing')
 
     cmd = commands.add_parser('lock', help='take or release the one-run-at-a-time lock')
     cmd.add_argument('action', choices=('acquire', 'release'))
@@ -1013,8 +1026,14 @@ def _run(args: argparse.Namespace) -> str:
         repo = found
     try:
         enabled = project.enabled_workflows(repo)
+        archived_on = project.archived(repo)
     except project.ConfigError as exc:
         raise Refused(str(exc)) from exc
+    if archived_on:
+        raise Refused(
+            f'{repo} was archived on {archived_on}: `mason project archive {repo} --undo` to run '
+            'it again'
+        )
     if args.workflow not in enabled:
         raise Refused(
             f'{args.workflow} is not enabled for {repo}: add it to `enabled` under [workflows] '
@@ -1089,6 +1108,25 @@ def _skills(args: argparse.Namespace) -> str:
 
 
 def _project(args: argparse.Namespace) -> str:
+    try:
+        if args.action == 'list':
+            return projects.render_list(projects.entries())
+        if args.action == 'archive':
+            if args.undo:
+                return projects.unarchive(args.repo)
+            return projects.archive(args.repo, datetime.now(UTC).strftime('%Y-%m-%d'))
+        if args.action == 'remove':
+            removal = projects.removal(args.repo)
+            print(removal.describe(), file=sys.stderr)
+            if not args.yes and _ask('Delete them? [y/N] ').strip().lower() not in ('y', 'yes'):
+                return 'Nothing deleted.\n'
+            return projects.remove(removal)
+    except projects.ProjectError as exc:
+        raise Refused(str(exc)) from exc
+    return _project_add(args)
+
+
+def _project_add(args: argparse.Namespace) -> str:
     workflows = list(dict.fromkeys(args.workflow))
     try:
         if not workflows and not args.yes:
@@ -1111,7 +1149,7 @@ def _ask(question: str) -> str:
         return input()
     except EOFError as exc:
         raise Refused(
-            '\nno answer: give --workflow and --yes to add a project without asking'
+            '\nno answer: give --yes (and --workflow) to go ahead without asking'
         ) from exc
 
 

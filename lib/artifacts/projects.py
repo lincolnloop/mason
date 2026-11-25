@@ -1,4 +1,4 @@
-"""The projects a developer looks after: `mason project add`.
+"""The projects a developer looks after: `mason project add`, `list`, `archive` and `remove`.
 
 Adding a project does, once, what each workflow would otherwise find missing at its first run:
 mason's own clone of the repository, the developer's settings file naming the workflows they
@@ -9,6 +9,8 @@ except the label (docs/packaging.md §1).
 
 import json
 import os
+import re
+import shutil
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -231,3 +233,153 @@ def apply(p: Plan, run_gh: Gh = gh) -> str:
     p.settings.write_text(p.settings_text, encoding='utf-8')
     done.append(f'wrote {p.settings}')
     return f'Added {p.repo}: {"; ".join(done)}.\n'
+
+
+# --- Listing, archiving and removing ------------------------------------------------------------
+
+# A run's directory (`<stamp>-<workflow>`) or log (`<stamp>-<workflow>.log`).
+RUN_NAME = re.compile(r'^(\d{8})-(\d{6})-([a-z0-9][a-z0-9-]*?)(?:\.log)?$')
+ARCHIVE_BLOCK = (
+    '\n[project]\n'
+    '# Set by `mason project archive`; remove it to run the project again.\n'
+    "archived = '{date}'\n"
+)
+
+
+@dataclass
+class Entry:
+    repo: str
+    workflows: list[str]
+    archived: str | None
+    # workflow -> when it last ran on this machine, as 'YYYY-MM-DD HH:MM' (UTC).
+    last_runs: dict[str, str]
+    cloned: bool
+
+
+def added(env: Mapping[str, str] | None = None) -> list[str]:
+    """Every project with a settings file, as owner/name."""
+    root = paths.config_home(env) / 'projects'
+    return sorted(f'{f.parent.name}/{f.stem}' for f in root.glob('*/*.toml'))
+
+
+def last_runs(repo: str, env: Mapping[str, str] | None = None) -> dict[str, str]:
+    latest: dict[str, str] = {}
+    for directory in (paths.runs(repo, env), paths.logs(repo, env)):
+        if not directory.is_dir():
+            continue
+        for item in directory.iterdir():
+            if match := RUN_NAME.match(item.name):
+                day, time, workflow = match.groups()
+                stamp = f'{day[:4]}-{day[4:6]}-{day[6:]} {time[:2]}:{time[2:4]}'
+                latest[workflow] = max(latest.get(workflow, ''), stamp)
+    return latest
+
+
+def entries(env: Mapping[str, str] | None = None) -> list[Entry]:
+    found = []
+    for repo in added(env):
+        try:
+            workflows = project.enabled_workflows(repo, env)
+            archived_on = project.archived(repo, env)
+        except project.ConfigError as exc:
+            raise ProjectError(str(exc)) from exc
+        found.append(
+            Entry(
+                repo=repo,
+                workflows=workflows,
+                archived=archived_on,
+                last_runs=last_runs(repo, env),
+                cloned=(paths.clone(repo, env) / '.git').exists(),
+            )
+        )
+    return found
+
+
+def render_list(found: Sequence[Entry]) -> str:
+    if not found:
+        return 'No projects added yet: `mason project add <owner>/<repo>`.\n'
+    lines = []
+    for entry in found:
+        status = f'archived {entry.archived}' if entry.archived else 'active'
+        clone = '' if entry.cloned else ', not cloned'
+        lines.append(f'{entry.repo} ({status}{clone})')
+        for name in entry.workflows:
+            lines.append(f'  {name:<28} last run {entry.last_runs.get(name, "never")}')
+        if not entry.workflows:
+            lines.append('  no workflows enabled')
+    return '\n'.join(lines) + '\n'
+
+
+def _settings_file(repo: str, env: Mapping[str, str] | None) -> Path:
+    try:
+        path = paths.settings(repo, env)
+    except ValueError as exc:
+        raise ProjectError(str(exc)) from exc
+    if not path.exists():
+        raise ProjectError(f'{repo} is not added: `mason project add {repo}`')
+    return path
+
+
+def archive(repo: str, today: str, env: Mapping[str, str] | None = None) -> str:
+    """Stop the project's runs, keeping its settings, clone, runs and logs."""
+    path = _settings_file(repo, env)
+    try:
+        if when := project.archived(repo, env):
+            return f'{repo} was already archived on {when}.\n'
+        if 'project' in project.settings(repo, env):
+            raise ProjectError(f'{path} already has a [project] section: add `archived` to it')
+    except project.ConfigError as exc:
+        raise ProjectError(str(exc)) from exc
+    text = path.read_text(encoding='utf-8')
+    path.write_text(text.rstrip('\n') + '\n' + ARCHIVE_BLOCK.format(date=today), encoding='utf-8')
+    return f'Archived {repo}: it runs nothing until `mason project archive {repo} --undo`.\n'
+
+
+def unarchive(repo: str, env: Mapping[str, str] | None = None) -> str:
+    path = _settings_file(repo, env)
+    try:
+        when = project.archived(repo, env)
+    except project.ConfigError as exc:
+        raise ProjectError(str(exc)) from exc
+    if not when:
+        return f'{repo} is not archived.\n'
+    text = path.read_text(encoding='utf-8')
+    block = ARCHIVE_BLOCK.format(date=when)
+    if block not in text:
+        raise ProjectError(f'{path}: the [project] section was edited; remove `archived` by hand')
+    path.write_text(text.replace(block, ''), encoding='utf-8')
+    return f'{repo} runs again.\n'
+
+
+@dataclass
+class Removal:
+    repo: str
+    # What will be deleted, existing paths only.
+    targets: list[Path]
+
+    def describe(self) -> str:
+        lines = [f'Removing {self.repo} deletes:', *(f'- {t}' for t in self.targets)]
+        lines += [
+            '',
+            'It leaves everything on GitHub as it is: PRs, issues, discussions and the '
+            '`automation` label.',
+        ]
+        return '\n'.join(lines) + '\n'
+
+
+def removal(repo: str, env: Mapping[str, str] | None = None) -> Removal:
+    settings = _settings_file(repo, env)
+    state = paths.project_state(repo, env)
+    if state.is_dir() and (held := sorted(p.name for p in state.glob('*.lock'))):
+        raise ProjectError(f'{repo} has a run in progress ({", ".join(held)}): try again after it')
+    candidates = [settings, paths.clone(repo, env), state]
+    return Removal(repo, [p for p in candidates if p.exists()])
+
+
+def remove(r: Removal) -> str:
+    for target in r.targets:
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+    return f'Removed {r.repo}.\n'

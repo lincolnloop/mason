@@ -42,12 +42,12 @@ README steps.
   post discussions), create the `automation` label, and write the settings file
   (`~/.config/mason/projects/acme/app.toml`). Interactive by default; `--workflows` and `--yes`
   for a script.
-- `mason project list`: each project, its enabled workflows and when each last ran.
-- `mason project archive acme/app`: stop its runs and keep its results and records, read-only.
-  `mason project remove` deletes its settings, clone and state; it asks first, and lists what is
+- `mason project list` (built): each project, its enabled workflows and when each last ran.
+- `mason project archive acme/app` (built): stop its runs and keep its results and records.
+  `mason project remove` (built) deletes its settings, clone and state; it asks first, and lists what is
   published that it leaves in place.
-- `[workflows] enabled` in a project's settings (`workflows.md` §4; built), so a project runs only the
-  workflows chosen for it. Only the list is in 0.1; mapping a workflow to another skill comes in
+- `[workflows] enabled` in a project's settings (`workflows.md` §4; built), so a project runs
+  only the workflows chosen for it. Only the list is in 0.1; mapping a workflow to another skill comes in
   0.2.
 
 ### The inbox

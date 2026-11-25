@@ -79,6 +79,14 @@ Then:
    `mason config path/to/<project>` shows every resolved value and where it came from, and
    `mason.toml.example` has every key.
 
+   Then, for the projects you've added:
+   ```sh
+   mason project list                          # each project, its workflows, when each last ran
+   mason project archive <owner>/<repo>        # stop its runs; keep everything (--undo to resume)
+   mason project remove <owner>/<repo>         # delete its settings, clone, runs and logs
+   ```
+   Removing a project changes nothing on GitHub: its PRs, issues, discussions and label stay.
+
 ## Run it
 
 **Interactively,** `mason run` starts Claude Code with the request already typed, and adds the

@@ -195,6 +195,77 @@ class EnabledSettingTests(unittest.TestCase):
         self.assertEqual(project.enabled_workflows(REPO), [])
 
 
+class ManageTests(unittest.TestCase):
+    """list, archive and remove, on projects whose settings are written directly."""
+
+    def setUp(self) -> None:
+        self.add(REPO, 'enabled = ["code-review", "dependency-upgrades"]')
+
+    def tearDown(self) -> None:
+        for home in (paths.config_home(), paths.cache_home(), paths.state_home()):
+            shutil.rmtree(home, ignore_errors=True)
+
+    def add(self, repo: str, workflows: str = '') -> Path:
+        path = paths.settings(repo)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f'version = 1\n\n[workflows]\n{workflows}\n')
+        return path
+
+    def test_list(self) -> None:
+        self.assertEqual(projects.added(), [REPO])
+        runs = paths.runs(REPO)
+        (runs / '20261101-090000-code-review').mkdir(parents=True)
+        (runs / '20261103-100500-code-review').mkdir()
+        (runs / 'not-a-run').mkdir()
+        paths.logs(REPO).mkdir(parents=True)
+        (paths.logs(REPO) / '20261102-080000-dependency-upgrades.log').write_text('')
+        (entry,) = projects.entries()
+        self.assertEqual(
+            entry.last_runs,
+            {'code-review': '2026-11-03 10:05', 'dependency-upgrades': '2026-11-02 08:00'},
+        )
+        text = projects.render_list([entry])
+        self.assertIn('o/app (active, not cloned)', text)
+        self.assertIn('last run 2026-11-03 10:05', text)
+        self.add('o/other', 'enabled = []')
+        self.assertIn('no workflows enabled', projects.render_list(projects.entries()))
+        self.assertIn('No projects added yet', projects.render_list([]))
+
+    def test_archive_and_undo(self) -> None:
+        before = paths.settings(REPO).read_text()
+        self.assertIn('Archived o/app', projects.archive(REPO, '2026-11-25'))
+        self.assertEqual(project.archived(REPO), '2026-11-25')
+        self.assertIn('already archived on 2026-11-25', projects.archive(REPO, '2026-12-01'))
+        self.assertIn('archived 2026-11-25', projects.render_list(projects.entries()))
+        self.assertIn('runs again', projects.unarchive(REPO))
+        self.assertEqual(paths.settings(REPO).read_text().rstrip(), before.rstrip())
+        self.assertIn('is not archived', projects.unarchive(REPO))
+
+    def test_archive_refusals(self) -> None:
+        with self.assertRaisesRegex(projects.ProjectError, 'is not added'):
+            projects.archive('o/missing', '2026-11-25')
+        path = paths.settings(REPO)
+        path.write_text(path.read_text() + "\n[project]\narchived = '2026-11-01'\n")
+        with self.assertRaisesRegex(projects.ProjectError, 'edited; remove `archived` by hand'):
+            projects.unarchive(REPO)
+
+    def test_remove(self) -> None:
+        clone, state = paths.clone(REPO), paths.project_state(REPO)
+        (clone / '.git').mkdir(parents=True)
+        (state / 'runs').mkdir(parents=True)
+        removal = projects.removal(REPO)
+        self.assertEqual(removal.targets, [paths.settings(REPO), clone, state])
+        self.assertIn('leaves everything on GitHub', removal.describe())
+        self.assertIn('Removed o/app', projects.remove(removal))
+        self.assertFalse(any(p.exists() for p in removal.targets))
+        self.assertEqual(projects.added(), [])
+
+    def test_remove_waits_for_a_run(self) -> None:
+        (paths.project_state(REPO) / 'code-review.lock').mkdir(parents=True)
+        with self.assertRaisesRegex(projects.ProjectError, 'run in progress'):
+            projects.removal(REPO)
+
+
 GH_SCRIPT = """#!/bin/sh
 echo "$*" >> "{record}"
 case "$1 $2" in
@@ -262,6 +333,22 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(project.enabled_workflows(REPO), sorted(runner.WORKFLOWS))
 
+    def test_list_archive_and_remove(self) -> None:
+        self.mason('project', 'add', REPO, '--workflow', 'code-review', '--yes')
+        self.assertIn('o/app (active)', self.mason('project', 'list').stdout)
+        self.assertIn('Archived', self.mason('project', 'archive', REPO).stdout)
+        result = self.mason('run', 'code-review', '--repo', REPO, '--pr', '1', '--dry-run')
+        self.assertIn('was archived on', result.stderr)
+        self.mason('project', 'archive', REPO, '--undo')
+        result = self.mason('run', 'code-review', '--repo', REPO, '--pr', '1', '--dry-run')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.mason('project', 'remove', REPO, stdin='n\n')
+        self.assertEqual(result.stdout, 'Nothing deleted.\n')
+        self.assertIn(str(paths.clone(REPO)), result.stderr)
+        result = self.mason('project', 'remove', REPO, '--yes')
+        self.assertEqual(result.stdout, 'Removed o/app.\n')
+        self.assertIn('No projects added yet', self.mason('project', 'list').stdout)
+
     def test_dry_run_and_no_answer(self) -> None:
         result = self.mason('project', 'add', REPO, '--workflow', 'code-review', '--dry-run')
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -269,7 +356,7 @@ class CliTests(unittest.TestCase):
         self.assertFalse(paths.settings(REPO).exists())
         result = self.mason('project', 'add', REPO)
         self.assertEqual(result.returncode, 1)
-        self.assertIn('give --workflow and --yes', result.stderr)
+        self.assertIn('give --yes (and --workflow)', result.stderr)
 
 
 if __name__ == '__main__':

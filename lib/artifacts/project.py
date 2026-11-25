@@ -43,6 +43,8 @@ EXAMPLE = 'mason.toml.example in the mason repository'
 SECTIONS: dict[str, dict[str, tuple[str, bool]]] = {
     # The workflows the developer runs on this project. Unset: every workflow.
     'workflows': {'enabled': ('list', False)},
+    # Set by `mason project archive`: the date it was archived. An archived project runs nothing.
+    'project': {'archived': ('str', False)},
     'repo': {'name': ('str', True), 'main_branch': ('str', True)},
     'limits': {'open_agent_prs': ('int', True), 'stale_after_days': ('int', True)},
     'verify': {
@@ -409,8 +411,16 @@ def _toml_value(value: Any) -> str:
 def enabled_workflows(repo: str, env: Mapping[str, str] | None = None) -> list[str]:
     """The workflows enabled for a project in the developer's settings: every workflow when the
     file doesn't exist or doesn't say."""
-    path = paths.settings(repo, env)
-    if not path.exists():
-        return sorted(runner.WORKFLOWS)
-    enabled = _read(path).get('workflows', {}).get('enabled')
+    enabled = settings(repo, env).get('workflows', {}).get('enabled')
     return sorted(runner.WORKFLOWS) if enabled is None else list(enabled)
+
+
+def archived(repo: str, env: Mapping[str, str] | None = None) -> str | None:
+    """The date the project was archived, or None."""
+    return settings(repo, env).get('project', {}).get('archived')
+
+
+def settings(repo: str, env: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """The developer's settings file for a project, checked; empty when there is none."""
+    path = paths.settings(repo, env)
+    return _read(path) if path.exists() else {}

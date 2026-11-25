@@ -20,6 +20,10 @@ version = 1
 # every workflow. `mason project add` writes it.
 enabled = ['dependency-assessment', 'dependency-upgrades', 'code-review']
 
+[project]
+# Written by `mason project archive`, and removed by `--undo`: an archived project runs nothing.
+archived = '2026-11-25'
+
 [repo]
 name = 'example-org/example-app'
 main_branch = 'main'
