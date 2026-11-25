@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import paths, project, projects, skills
+from . import paths, project, projects, runner, skills
 
 # Most urgent first: something is broken, a PR can't merge, a person's decision is waiting, a
 # PR is waiting for review, an issue has had no response.
@@ -216,8 +216,9 @@ def local_items(repo: str, workflows: Sequence[str], env: Mapping[str, str]) -> 
     declared = skills.workflows(env)
     try:
         mapping = project.skill_paths(repo, env)
+        granted = project.grants(repo, env)
     except project.ConfigError:
-        mapping = {}  # collect() reports an invalid settings file
+        mapping, granted = {}, {}  # collect() reports an invalid settings file
     for name in workflows:
         if name not in declared and name not in mapping:
             found.append(
@@ -230,6 +231,16 @@ def local_items(repo: str, workflows: Sequence[str], env: Mapping[str, str]) -> 
             problems.setdefault(str(exc).split(': ', 1)[-1], []).append(name)
             continue
         spec = skill.workflow if skill and skill.workflow else declared[name]
+        if missing_tools := runner.ungranted(name, spec, mapping, granted):
+            found.append(
+                Item(
+                    repo,
+                    BROKEN,
+                    f'{name}: unattended runs are refused until you grant its mapped skill '
+                    f'{", ".join(missing_tools)}',
+                    f'[grants] in {paths.settings(repo, env)}',
+                )
+            )
         missing = [t for t in spec.env if not env.get(t) and t not in kept]
         if missing:
             found.append(

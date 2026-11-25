@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from artifacts import doctor, paths, project, runner, skills, version
+from artifacts import doctor, inbox, paths, project, runner, skills, version
 
 from . import HOME, ROOT
 
@@ -380,6 +380,101 @@ class SettingsTests(unittest.TestCase):
         ):
             with self.subTest(text=text), self.assertRaisesRegex(skills.SkillError, message):
                 skills.parse_settings(text)
+
+
+class GrantTests(WithoutTheCheckout):
+    """A mapped skill's tools need the developer's grant before an unattended run uses them."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.mine = install(self.tmp / 'team', 'code-review').parent
+        text = (self.mine / 'SKILL.md').read_text()
+        (self.mine / 'SKILL.md').write_text(
+            text.replace(
+                '  mason-task', "  mason-tools: 'Bash(make *), Bash(gh pr merge *)'\n  mason-task"
+            )
+        )
+        self.project = self.tmp / 'app'
+        subprocess.run(['git', 'init', '-q', str(self.project)], check=True)
+        git = ['git', '-C', str(self.project)]
+        subprocess.run([*git, 'remote', 'add', 'origin', 'git@github.com:o/app.git'], check=True)
+
+    def tearDown(self) -> None:
+        super().tearDown()
+        self._tmp.cleanup()
+        for home in (paths.data_home(), paths.config_home(), paths.state_home()):
+            shutil.rmtree(home, ignore_errors=True)
+
+    def settings(self, extra: str = '') -> None:
+        path = paths.settings('o/app')
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"version = 1\n[skills]\ncode-review = '{self.mine}'\n{extra}")
+
+    def run_unattended(self) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, '-I', str(ROOT / 'bin' / 'artifact'), 'run', 'code-review',
+             '--project', str(self.project), '--unattended', '--dry-run'],
+            capture_output=True, text=True, check=False,
+        )  # fmt: skip
+
+    def test_ungranted(self) -> None:
+        spec = skills.read(self.mine / 'SKILL.md').workflow
+        mapping = {'code-review': str(self.mine)}
+        self.assertEqual(runner.ungranted('code-review', spec, {}, {}), [])  # installed: trusted
+        self.assertEqual(
+            runner.ungranted('code-review', spec, mapping, {}),
+            ['Bash(make *)', 'Bash(gh pr merge *)'],
+        )
+        granted = {'code-review': ['Bash(make *)']}
+        self.assertEqual(
+            runner.ungranted('code-review', spec, mapping, granted), ['Bash(gh pr merge *)']
+        )
+
+    def test_an_unattended_run_waits_for_the_grant(self) -> None:
+        self.settings()
+        result = self.run_unattended()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "haven't granted for unattended runs: 'Bash(make *)', 'Bash(gh pr merge *)'",
+            result.stderr,
+        )
+        self.assertIn(
+            "[grants]\ncode-review = ['Bash(make *)', 'Bash(gh pr merge *)']", result.stderr
+        )
+
+    def test_granted_tools_are_allowed_and_denied_ones_still_refused(self) -> None:
+        self.settings("[grants]\ncode-review = ['Bash(make *)', 'Bash(gh pr merge *)']\n")
+        result = self.run_unattended()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        allowed, denied = result.stdout.split('--disallowedTools')
+        self.assertIn("'Bash(make *)'", allowed)
+        self.assertIn("'Bash(gh pr merge *)'", denied)  # merging is never an agent's
+
+    def test_interactive_runs_need_no_grant(self) -> None:
+        self.settings()
+        result = subprocess.run(
+            [sys.executable, '-I', str(ROOT / 'bin' / 'artifact'), 'run', 'code-review',
+             '--project', str(self.project), '--dry-run'],
+            capture_output=True, text=True, check=False,
+        )  # fmt: skip
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_settings_and_inbox(self) -> None:
+        self.assertTrue(project.check({'grants': {'code-review': 'Bash(make *)'}}))
+        self.settings("[workflows]\nenabled = ['code-review']\n")
+        items = inbox.local_items('o/app', ['code-review'], dict(os.environ))
+        self.assertEqual(
+            [i.text for i in items],
+            ['code-review: unattended runs are refused until you grant its mapped skill '
+             'Bash(make *), Bash(gh pr merge *)'],
+        )  # fmt: skip
+        self.settings("[grants]\ncode-review = ['Bash(make *)', 'Bash(gh pr merge *)']\n")
+        self.assertEqual(
+            project.grants('o/app'), {'code-review': ['Bash(make *)', 'Bash(gh pr merge *)']}
+        )
+        self.assertEqual(inbox.local_items('o/app', ['code-review'], dict(os.environ)), [])
 
 
 if __name__ == '__main__':

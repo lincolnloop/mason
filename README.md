@@ -95,7 +95,9 @@ Then:
 
    To run a workflow on this project with a skill other than the installed one (your team's
    own code review, say), map it in the same file: `[skills]` then
-   `code-review = '~/Work/team-skills/code-review'`.
+   `code-review = '~/Work/team-skills/code-review'`. A mapped skill gets no tools beyond the
+   base set in unattended runs until you grant them under `[grants]`
+   (`code-review = ['Bash(make *)']`); `mason run --unattended` says which to grant.
 
    Then, for the projects you've added:
    ```sh

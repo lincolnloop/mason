@@ -99,7 +99,8 @@ A project chooses its workflows, and new ones are added without changing the eng
   prompt names the skill's file (built).
 - Workflow settings declared by the skill (`settings.toml`), replacing its entry in
   `project.SECTIONS` (built).
-- Tool requests and grants; workflows from other sources and from the project itself.
+- Tool requests and grants (`[grants]`); workflows from other sources (built). Workflows from the
+  project's own `.claude/skills/` are still to come.
 - `run/2`, and each result naming the skill's source and version.
 
 ## 0.3: results and notes

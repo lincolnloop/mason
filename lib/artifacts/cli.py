@@ -1083,6 +1083,7 @@ def _run(args: argparse.Namespace) -> str:
         enabled = project.enabled_workflows(repo)
         archived_on = project.archived(repo)
         mapping = project.skill_paths(repo)
+        granted = project.grants(repo)
     except project.ConfigError as exc:
         raise Refused(str(exc)) from exc
     if archived_on:
@@ -1104,6 +1105,14 @@ def _run(args: argparse.Namespace) -> str:
         runner.prompt(args.workflow, args.pr, args.request, spec=spec)
     except ValueError as exc:
         raise Refused(str(exc)) from exc
+    if args.unattended and (missing := runner.ungranted(args.workflow, spec, mapping, granted)):
+        listed = ', '.join(f"'{tool}'" for tool in missing)
+        raise Refused(
+            f'{args.workflow} runs the skill in {skill.path.parent}, which asks for tools you '
+            f"haven't granted for unattended runs: {listed}. If you trust it with them, add to "
+            f'{paths.settings(repo)}:\n\n[grants]\n{args.workflow} = [{listed}]\n\n'
+            f'{args.workflow} not started'
+        )
     if args.workflow not in enabled:
         raise Refused(
             f'{args.workflow} is not enabled for {repo}: add it to `enabled` under [workflows] '

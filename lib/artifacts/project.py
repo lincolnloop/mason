@@ -244,7 +244,7 @@ def resolve(project: Path, env: Mapping[str, str] | None = None) -> Resolved:
                 resolved.sources[(section, key)] = 'default'
         if values or section in file_config:
             resolved.config[section] = values
-    for section in sorted(set(file_config) - set(sections) - {'skills'}):
+    for section in sorted(set(file_config) - set(sections) - {'skills', 'grants'}):
         resolved.notes.append(f'[{section}] is for no installed workflow, so it is not read')
     for path in detect.unsupported_lockfiles(detect.tracked_files(project)):
         resolved.notes.append(f'{path}: not read; dependency-upgrades supports pip-compile and npm')
@@ -296,6 +296,11 @@ def check(
     if 'skills' in config and checker.object(mapped, '$.skills', (), tuple(mapped or ())):
         for name, value in mapped.items():
             checker.string(value, f'$.skills.{name}')
+    # workflow name -> the tools its mapped skill may use unattended.
+    granted = config.get('grants')
+    if 'grants' in config and checker.object(granted, '$.grants', (), tuple(granted or ())):
+        for name, value in granted.items():
+            checker.string_array(value, f'$.grants.{name}')
     for name, section in config.items():
         settings = sections.get(name)
         if settings is None:
@@ -369,11 +374,14 @@ def _toml_value(value: Any) -> str:
 
 
 def enabled_workflows(repo: str, env: Mapping[str, str] | None = None) -> list[str]:
-    """The workflows enabled for a project in the developer's settings: every installed workflow
-    when the file doesn't exist or doesn't say. A name that isn't installed is kept: `mason run`
+    """The workflows enabled for a project in the developer's settings: every installed or
+    mapped (`[skills]`) workflow when the file doesn't exist or doesn't say. A name that isn't installed is kept: `mason run`
     and `mason inbox` say so, rather than the settings file becoming unreadable."""
-    enabled = settings(repo, env).get('workflows', {}).get('enabled')
-    return sorted(skills.workflows(env)) if enabled is None else list(enabled)
+    found = settings(repo, env)
+    enabled = found.get('workflows', {}).get('enabled')
+    if enabled is not None:
+        return list(enabled)
+    return sorted({*skills.workflows(env), *found.get('skills', {})})
 
 
 def archived(repo: str, env: Mapping[str, str] | None = None) -> str | None:
@@ -390,3 +398,8 @@ def settings(repo: str, env: Mapping[str, str] | None = None) -> dict[str, Any]:
 def skill_paths(repo: str, env: Mapping[str, str] | None = None) -> dict[str, str]:
     """workflow -> the skill directory the project's settings map it to (`[skills]`)."""
     return dict(settings(repo, env).get('skills', {}))
+
+
+def grants(repo: str, env: Mapping[str, str] | None = None) -> dict[str, list[str]]:
+    """workflow -> the tools the developer has granted its mapped skill (`[grants]`)."""
+    return {name: list(tools) for name, tools in settings(repo, env).get('grants', {}).items()}

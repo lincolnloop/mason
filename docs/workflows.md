@@ -158,21 +158,32 @@ That is the developer's choice, as now.
 
 ## 5. Granting tools
 
-A skill's `tools` is a request. For an unattended run the engine allows:
+*Built in 0.2 (plan step 4).*
+
+A skill's `mason-tools` is a request. For an unattended run the engine allows:
 
 ```
-base tools + Bash(mason *) + (requested ∩ granted) − DENIED_TOOLS
+base tools + Bash(mason *) + (requested, if trusted or granted) + --allow − DENIED_TOOLS
 ```
 
-- **mason's own skills are granted what they request**, because they ship with the engine at the
-  same tag. Any other source needs the grant written in `[workflows.<name>] tools`.
-- **A request that isn't granted** makes `mason doctor --workflow <name> --unattended` fail, and
-  prints the line to add. A run never widens its permissions silently.
-- **A grant is tied to the skill's version.** When `npx skills update` changes a skill whose
-  request has changed, `mason doctor` reports the difference, and the run is refused until the
-  grant is updated.
-- **`DENIED_TOOLS` can't be overridden.** No setting allows merging, reviewing as approve or
-  request-changes, or force-pushing.
+- **An installed skill is trusted with what it requests.** Installing it, with
+  `mason skills install` or `--global`, was the developer's decision, made once for every
+  project.
+- **A skill a project maps to a directory (`[skills]`) needs a grant** for every tool it
+  requests, in that project's settings:
+  ```toml
+  [grants]
+  code-review = ['Bash(make *)']
+  ```
+  A mapped directory can be anything, and can change with a `git pull`, so its requests are
+  granted tool by tool, per project.
+- **An ungranted request refuses the run.** `mason run --unattended` stops before any session
+  starts and prints the `[grants]` lines to add, and `mason inbox` lists it as broken. A run
+  never widens its permissions silently.
+- **A grant names tools, not versions.** A mapped skill that starts asking for a new tool is
+  refused until that tool is granted; one that keeps asking for the same tools runs as before.
+- **`DENIED_TOOLS` can't be overridden.** A grant can't allow merging, approving or requesting
+  changes on a PR, or force-pushing: they stay in `--disallowedTools`, which wins.
 - `--allow` on the command line still adds a tool for one run.
 
 Interactive runs are unchanged: the person approves actions under their own permission settings.
@@ -543,7 +554,7 @@ Each step can ship by itself. `docs/roadmap.md` places them in releases: steps 1
 | 1 | `mason-*` metadata in mason's skills; the engine reads it; `runner.WORKFLOWS` removed (built) | none |
 | 2 | `[workflows] enabled` and `[skills]`; the per-run skills directory; the prompt names the skill's file (built) | a project runs only what it enables, with the skill its settings choose |
 | 3 | settings declared by skills (`settings.toml`); workflow entries removed from `project.SECTIONS` (built) | none |
-| 4 | tool requests and grants; workflows from other sources and from the project | new workflows without engine changes |
+| 4 | tool requests and grants; workflows from other sources (built; from the project itself, not yet) | new workflows without engine changes |
 | 5 | `run/2` and per-skill provenance | published records name the skill's source |
 | 6 | results directory, `save-result`, `mason publish`; `dependency-report` moved to it | reports kept per project, published where settings say |
 | 7 | `mason note` and the `notes` skill | analyses kept per project, out of the project's history |

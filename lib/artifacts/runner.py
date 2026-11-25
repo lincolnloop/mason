@@ -81,6 +81,21 @@ def declared(name: str) -> skills.Workflow:
     return found[name]
 
 
+def ungranted(
+    workflow: str, spec: skills.Workflow, mapping: dict[str, str], granted: dict[str, list[str]]
+) -> list[str]:
+    """The tools an unattended run of `workflow` asks for that nobody has granted.
+
+    An installed skill is trusted with what it asks for: installing it was the developer's
+    decision. A skill a project maps to a directory (`[skills]`) may come from anywhere and
+    change with a `git pull`, so each tool it asks for beyond the base set must be granted in
+    the project's settings (`[grants]`). `DENIED_TOOLS` are refused whatever is granted."""
+    if workflow not in mapping:
+        return []
+    allowed = set(granted.get(workflow, []))
+    return [tool for tool in spec.tools if tool not in allowed]
+
+
 def prompt(
     workflow: str,
     pr: int | None = None,

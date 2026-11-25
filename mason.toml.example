@@ -25,6 +25,12 @@ enabled = ['dependency-assessment', 'dependency-upgrades', 'code-review']
 # The skill's `name` must be the workflow's, and it must state a mason-requires this mason meets.
 code-review = '~/Work/example-org-skills/code-review'
 
+[grants]
+# The tools a mapped skill (above) may use in unattended runs, beyond the base set. An installed
+# skill is trusted with what it asks for; a mapped one gets only what is granted here, and its
+# runs are refused until every tool it asks for is. Merging and force-pushing are never allowed.
+code-review = ['Bash(make *)']
+
 [project]
 # Written by `mason project archive`, and removed by `--undo`: an archived project runs nothing.
 archived = '2026-11-25'
