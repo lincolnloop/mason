@@ -110,6 +110,17 @@ WORKFLOWS = {
         tools=(),
         needs_pr=True,
     ),
+    'sentry-errors': Workflow(
+        task='Run the Sentry errors workflow for this project',
+        # The project's tests and builds, as for an upgrade. Sentry is read through mason.
+        tools=('Bash(make *)', 'Bash(npm *)'),
+        env=('SENTRY_AUTH_TOKEN',),
+    ),
+    'sentry-retrospective': Workflow(
+        task='Run the Sentry retrospective for this project',
+        tools=MASON_CHECKS,
+        env=('SENTRY_AUTH_TOKEN',),
+    ),
     'code-review-retrospective': Workflow(
         task='Run the code review retrospective for this project',
         tools=MASON_CHECKS,

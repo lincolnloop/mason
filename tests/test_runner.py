@@ -83,9 +83,14 @@ class HeadlessCommandTests(unittest.TestCase):
 
     def test_doctor_command_checks_the_workflow(self) -> None:
         self.assertEqual(
-            runner.doctor_command('dependency-upgrades'),
-            ['mason', 'doctor', '--workflow', 'dependency-upgrades', '--unattended'],
+            runner.doctor_command('sentry-errors'),
+            ['mason', 'doctor', '--workflow', 'sentry-errors', '--unattended'],
         )
+
+    def test_sentry_workflows_declare_their_token(self) -> None:
+        for name in ('sentry-errors', 'sentry-retrospective'):
+            self.assertIn('SENTRY_AUTH_TOKEN', runner.WORKFLOWS[name].env)
+        self.assertEqual(runner.WORKFLOWS['code-review'].env, ())
 
 
 class InteractiveCommandTests(unittest.TestCase):

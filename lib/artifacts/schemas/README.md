@@ -14,6 +14,7 @@ that drifts from the code fails the tests.
 | [`review-outcomes/1`](review-outcomes.md) | `artifact collect-review-outcomes` | the `code-review-retrospective` skill; the report |
 | [`outcomes/2`](outcomes.md) | `artifact collect-outcomes`, for a retrospective | the `dependency-retrospective` skill; the report |
 | [`dependency-report/1`](dependency-report.md) | `artifact collect-report`, for one month | the `dependency-report` skill; the published report |
+| [`sentry-outcomes/1`](sentry-outcomes.md) | `artifact collect-sentry-outcomes` | the `sentry-retrospective` skill; the report |
 | [`run/1`](run.md) | every run, at its start | the renderer; anyone asking who started a PR, or why a run opened none |
 
 ## Shared fields

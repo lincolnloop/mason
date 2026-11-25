@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import unittest
@@ -97,12 +98,14 @@ class OtherCheckTests(unittest.TestCase):
         self.assertEqual(doctor.check_gh_auth(which_of(), runner({})).status, doctor.FAIL)
 
     def test_tokens_never_show_their_values(self) -> None:
-        checks = doctor.check_tokens(['EXAMPLE_TOKEN', 'OTHER'], {'EXAMPLE_TOKEN': 's3cr3t'})
+        checks = doctor.check_tokens(
+            ['SENTRY_AUTH_TOKEN', 'OTHER'], {'SENTRY_AUTH_TOKEN': 's3cr3t'}
+        )
         self.assertEqual([c.status for c in checks], [doctor.OK, doctor.FAIL])
         self.assertNotIn('s3cr3t', doctor.render(checks))
 
     def test_empty_token_counts_as_unset(self) -> None:
-        checks = doctor.check_tokens(['EXAMPLE_TOKEN'], {'EXAMPLE_TOKEN': ''})
+        checks = doctor.check_tokens(['SENTRY_AUTH_TOKEN'], {'SENTRY_AUTH_TOKEN': ''})
         self.assertEqual(checks[0].status, doctor.FAIL)
 
     def test_unattended_wants_a_claude_token(self) -> None:
@@ -126,6 +129,27 @@ class OtherCheckTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    def test_missing_workflow_token_exits_1_and_reports_everything(self) -> None:
+        env = {k: v for k, v in os.environ.items() if k != 'SENTRY_AUTH_TOKEN'}
+        result = subprocess.run(
+            [
+                sys.executable,
+                '-I',
+                str(ROOT / 'bin' / 'artifact'),
+                'doctor',
+                '--workflow',
+                'sentry-errors',
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('fail  SENTRY_AUTH_TOKEN', result.stderr)
+        self.assertIn('git', result.stderr)
+        self.assertIn('failed,', result.stderr)
+
     def test_unknown_workflow_is_refused(self) -> None:
         result = subprocess.run(
             [sys.executable, '-I', str(ROOT / 'bin' / 'artifact'), 'doctor', '--workflow', 'nope'],

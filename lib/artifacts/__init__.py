@@ -4,7 +4,8 @@
 - `change`: the pull request it opens.
 - `review`: a review of a pull request.
 - `run`: who started a run, where, and how it ended.
-- `outcomes`, `review-outcomes`: what happened afterwards, for a retrospective.
+- `outcomes`, `review-outcomes`, `sentry-outcomes`: what happened afterwards, for a
+  retrospective.
 - `assessment`: every open alert, and what was decided about it.
 - `dependency-report`: a month's vulnerability figures, for the people the project answers to.
 
@@ -24,6 +25,7 @@ from . import (
     review,
     review_outcomes,
     run,
+    sentry_outcomes,
 )
 
 VALIDATORS = {
@@ -32,6 +34,7 @@ VALIDATORS = {
     run.SCHEMA: run.validate,
     outcomes.SCHEMA: outcomes.validate,
     review_outcomes.SCHEMA: review_outcomes.validate,
+    sentry_outcomes.SCHEMA: sentry_outcomes.validate,
     report.SCHEMA: report.validate,
     assessment.SCHEMA: assessment.validate,
 }

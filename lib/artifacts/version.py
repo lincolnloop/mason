@@ -88,6 +88,13 @@ def clone(url: str, directory: Path, run: Callable[..., object] = subprocess.run
         raise VersionError(f'git clone {url} failed: {exc.stderr.strip()}') from exc
 
 
+def package_version() -> str:
+    try:
+        return metadata.version('mason')
+    except metadata.PackageNotFoundError:
+        return 'unknown'
+
+
 def _commit(text: str | None) -> str | None:
     if not text:
         return None
