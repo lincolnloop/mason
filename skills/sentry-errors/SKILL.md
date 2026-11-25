@@ -3,7 +3,7 @@ name: sentry-errors
 description: 'This skill should be used when asked to "fix the Sentry errors", "triage Sentry for production", "run the Sentry pass", "look at the unresolved errors" or "fix the N+1 queries Sentry reports" in a project, interactively or unattended (from a scheduler or another agent). It reads one environment''s unresolved Sentry issues through the API (without personal data), groups them by root cause, checks each group''s releases and history, and records every group as a finding. It fixes the most valuable fixable group as one pull request, with a regression test and a signal the retrospective checks: that the errors stop. Findings that need a person go in the PR, or in a triage issue when there is nothing to fix.'
 version: 1.2.0
 metadata:
-  mason-requires: '>=0.4,<0.6'
+  mason-requires: '>=0.4,<0.7'
   mason-task: 'Run the Sentry errors workflow for this project'
   mason-schedule: 'weekly mon 07:00'
   mason-kind: 'check'

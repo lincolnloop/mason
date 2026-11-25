@@ -3,7 +3,7 @@ name: dependency-upgrades
 description: 'This skill should be used when asked to "run the dependency upgrades", "do the Dependabot pass", "apply the easy security upgrades" or "ship the easy dependency fixes" in a project, interactively or unattended (from a scheduler or another agent). It reads the month''s dependency assessment issue (written by dependency-assessment), refuses if alerts have opened since it was made, applies the easy upgrades one commit per package, and opens one pull request whose package and alert tables are derived from the lockfiles. It never merges: the PR, with its embedded artifacts, is the hand-off to whoever does.'
 version: 3.2.0
 metadata:
-  mason-requires: '>=0.4,<0.6'
+  mason-requires: '>=0.4,<0.7'
   mason-task: 'Run the dependency upgrades for this project'
   mason-schedule: 'daily 07:00'
   mason-kind: 'check'

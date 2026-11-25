@@ -146,7 +146,7 @@ place.
   Later: merging stays a person's decision until the retrospectives have a record of how
   mason's PRs fare.
 
-## 0.6: safety and identity
+## 0.6: safety and identity (released 0.6.0)
 
 What makes it safe to run more workflows, from more sources, on more projects.
 

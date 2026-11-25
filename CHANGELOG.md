@@ -3,7 +3,7 @@
 What changed in each release of mason, for the developers who install it. Install the engine and
 its skills from the same tag: each skill states the mason versions it works with.
 
-## Unreleased (0.6)
+## 0.6.0
 
 - Credentials per project or per owner (`[credentials]`): an env file of its tokens, where its
   `GH_TOKEN` comes from (an env variable or a `gh` login), the name and email on its commits,

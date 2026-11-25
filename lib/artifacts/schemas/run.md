@@ -16,7 +16,7 @@ machine that ran it:
 {
   "schema": "run/1",
   "project": "example-org/example-app",
-  "produced_by": {"skill": "dependency-upgrades", "automation_sha": "889bd9b0000000000000000000000000000000aa", "mason_version": "0.5.0", "skill_version": "3.0.0", "skill_source": "installed"},
+  "produced_by": {"skill": "dependency-upgrades", "automation_sha": "889bd9b0000000000000000000000000000000aa", "mason_version": "0.6.0", "skill_version": "3.0.0", "skill_source": "installed"},
   "id": "20261111-093000-dependency-upgrades",
   "trigger": "unattended",
   "started_by": "systemd timer dependency-upgrades.timer",

@@ -3,7 +3,7 @@ name: dependency-assessment
 description: 'This skill should be used when asked to "run the dependency assessment", "assess the Dependabot alerts", "triage Dependabot alerts", "what is the state of our security alerts" or "update the dependency assessment" in a project, interactively or unattended (from a scheduler or another agent). It pulls every open Dependabot alert, classifies each against what is actually installed on the main branch (separating end-of-life lines, blocked ranges, major bumps and missing fixes from easy upgrades), searches for existing tracked work, writes a finding per package, and publishes the result to the month''s assessment issue: the body is replaced with the latest assessment and a comment says what changed. It changes no code: dependency-upgrades applies the easy findings.'
 version: 1.2.0
 metadata:
-  mason-requires: '>=0.4,<0.6'
+  mason-requires: '>=0.4,<0.7'
   mason-task: 'Run the dependency assessment for this project'
   mason-schedule: 'daily 06:00'
   mason-kind: 'check'
