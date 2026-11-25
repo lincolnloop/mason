@@ -1,0 +1,47 @@
+# A developer's mason settings for one project. Copy this file to
+# ~/.config/mason/projects/<owner>/<repo>.toml, named after the project's GitHub repository, keep
+# `version`, and delete every section and key you don't need to change. The settings are yours,
+# not the project's: nothing is added to the project.
+#
+# The file is optional, and so is every key in it. A key the file leaves out is detected from the
+# repository (the GitHub remote, origin/HEAD, compiled requirements headers, tracked npm
+# lockfiles, an ignored .env) or defaulted. So a project only needs the file once a value has to
+# differ, and then only the keys that differ. To see what a project resolves to, and where each
+# value came from, as a starting file:
+#   mason config <project dir> --toml
+# tests/test_project.py validates this file.
+
+# The version of this file's format. Required: a later mason that changes the format refuses an
+# older file and says how to update it, rather than misreading it.
+version = 1
+
+[repo]
+name = 'example-org/example-app'
+main_branch = 'main'
+
+[limits]
+# Open agent PRs across all workflows. A pass that would go over opens nothing new and says so.
+open_agent_prs = 3
+stale_after_days = 14
+
+[verify]
+# Set false only if two worktrees can run the tests at the same time. Tests that run in docker
+# compose with named volumes can't: the volumes are shared between worktrees.
+exclusive = true
+reason = 'docker compose volumes are shared between worktrees'
+# Untracked files a fresh worktree needs before verify commands can run. Copied, never linked.
+worktree_copy = ['.env']
+# CI runs the tests on every pull request. Detected from .circleci/config.yml or
+# .github/workflows/. An unattended run that can't test locally leaves the tests to CI.
+ci = true
+
+[dependency-upgrades]
+pip_requirements = ['requirements/*.txt']
+pip_sources = ['requirements/*.in']
+# Detected from the compiled files' headers when left out. Setting CUSTOM_COMPILE_COMMAND keeps
+# the header the same whichever way the files are compiled, so it doesn't churn in the diff.
+pip_compile = 'CUSTOM_COMPILE_COMMAND="make requirements" pip-compile requirements/base.in'
+npm_projects = ['frontend', 'frontend/admin']
+npm_build = 'npm run build'
+# When left out, the skill takes the test command from the project's AGENTS.md and says so.
+verify = ['make test']

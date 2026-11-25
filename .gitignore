@@ -1,0 +1,8 @@
+# Anything starting with a dot is ignored (editor settings, caches, .env, .venv), except what
+# the repository needs, listed below.
+.*
+!.gitignore
+!.agents/
+!.claude/
+__pycache__/
+*.pyc
