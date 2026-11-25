@@ -1,9 +1,9 @@
 ---
 name: dependency-upgrades
 description: 'This skill should be used when asked to "run the dependency upgrades", "do the Dependabot pass", "apply the easy security upgrades" or "ship the easy dependency fixes" in a project, interactively or unattended (from a scheduler or another agent). It reads the month''s dependency assessment issue (written by dependency-assessment), refuses if alerts have opened since it was made, applies the easy upgrades one commit per package, and opens one pull request whose package and alert tables are derived from the lockfiles. It never merges: the PR, with its embedded artifacts, is the hand-off to whoever does.'
-version: 3.1.0
+version: 3.2.0
 metadata:
-  mason-requires: '>=0.4,<0.5'
+  mason-requires: '>=0.4,<0.6'
   mason-task: 'Run the dependency upgrades for this project'
   mason-schedule: 'daily 07:00'
   mason-kind: 'check'
@@ -59,6 +59,7 @@ report: `mason defer <RUN> --action '<what to do>' --reason '<why it needs a per
 | Write findings and the change to the run directory | Unattended |
 | Commit easy upgrades, push the branch, open the PR | Unattended: the PR is the hand-off |
 | Comment on the open upgrade PR this run stopped for | Unattended: the run's record goes where people look |
+| Close a stale upgrade PR, to open a fresh one | Confirm first; unattended, deferred to the inbox |
 | Force a package past a parent's declared range (npm `overrides`, a pip constraint) | Confirm first |
 | Create the `automation` label | Confirm first |
 | Dismiss an alert; merge the PR | Never: not this skill's job |
@@ -110,6 +111,17 @@ report: `mason defer <RUN> --action '<what to do>' --reason '<why it needs a per
    ```
    Then go to Step 7. If the count is at `limits.open_agent_prs` (other workflows' PRs), stop
    and say which PRs are waiting for a decision.
+
+   **A stale upgrade PR is replaced, not waited on.** If that open PR has had no activity for
+   `limits.stale_after_days` days, its alerts have probably moved on, and a fresh PR from the
+   current assessment serves the reviewer better than rebasing it. Closing it is *confirm
+   first*:
+   - Interactive: ask. Once confirmed, close it pointing at what follows, then carry on as if no
+     PR were open:
+     `gh pr close <N> --repo <repo.name> --comment 'Stale: replaced by a fresh upgrade PR from the current alerts.'`
+   - Unattended: leave the stopped comment as above, and defer the close to the developer's
+     inbox, so the next run after they approve it opens the fresh PR:
+     `mason defer $RUN --action 'Close stale upgrade PR #<N>' --reason 'no activity in <days> days; the next run opens a fresh one' --command "gh pr close <N> --repo <repo.name> --comment 'Stale: replaced by a fresh upgrade PR from the current alerts.'"`
 6. **Where the tests run.** If `verify.exclusive` is false, run them locally (Step 4). If it is
    true:
    - Interactive: ask the person to confirm that no other session is running this project's

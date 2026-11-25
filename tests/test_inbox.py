@@ -129,6 +129,26 @@ class GitHubTests(unittest.TestCase):
         )
         self.assertEqual(items[0].where, 'https://github.com/o/app/pull/1')
 
+    def test_stale_and_behind(self) -> None:
+        items = inbox.pr_items(
+            REPO,
+            [
+                pr(6, createdAt='2026-10-01T12:00:00Z', updatedAt='2026-11-01T12:00:00Z'),
+                pr(7, mergeStateStatus='BEHIND', updatedAt='2026-11-24T12:00:00Z'),
+                pr(8, createdAt='2026-11-01T12:00:00Z', updatedAt='2026-11-20T12:00:00Z'),
+            ],
+            NOW,
+            stale_after_days=14,
+        )
+        self.assertEqual(
+            [(i.kind, i.text.split(': ', 1)[1]) for i in items],
+            [
+                (inbox.DECIDE, 'stale, no activity in 24 days'),
+                (inbox.REVIEW, 'waiting for review, open 3 days, behind its base'),
+                (inbox.REVIEW, 'waiting for review, open 24 days'),
+            ],
+        )
+
     def test_issues_without_a_response(self) -> None:
         items = inbox.issue_items(REPO, [issue(7), issue(8, comments=2)], NOW)
         self.assertEqual([i.text for i in items], ['issue #7 Report 7: no response in 1 day'])

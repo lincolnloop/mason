@@ -3,7 +3,7 @@ name: notes
 description: 'This skill should be used when asked to "save this analysis", "keep this as a note", "save the assessment", "what notes do we have on <topic>", "mark the note adopted" or "drop that proposal" for a project, or before starting a design review, investigation, option paper or assessment that earlier analyses may already cover. It keeps analyses in mason, per project, out of the project''s history, with a status that says what became of each.'
 version: 1.0.0
 metadata:
-  mason-requires: '>=0.3,<0.5'
+  mason-requires: '>=0.3,<0.6'
 ---
 
 # Notes

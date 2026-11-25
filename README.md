@@ -225,9 +225,11 @@ reviewer needs is on GitHub.
 - **broken:** a failed unattended run (with its log), a token a workflow needs that isn't set,
   an installed skill that doesn't match this mason;
 - **blocked:** a PR mason opened whose CI is failing, or that conflicts with its base;
+- **decide** also: a PR mason opened that has gone stale, with no activity in `limits.stale_after_days`;
 - **decide:** an action an unattended run left for a person instead of taking it (opening an
   issue, archiving Sentry noise), with the command that would do it;
-- **review:** a PR mason opened that is waiting for review, has changes requested, or is a draft;
+- **review:** a PR mason opened that is waiting for review (noting when it is behind its base),
+  has changes requested, or is a draft;
 - **respond:** an issue mason opened that nobody has answered.
 
 ```sh

@@ -165,7 +165,10 @@ def latest_statuses(repo: str, env: Mapping[str, str] | None = None) -> dict[str
 
 # --- GitHub ------------------------------------------------------------------------------------
 
-PR_FIELDS = 'number,title,url,isDraft,reviewDecision,mergeable,statusCheckRollup,createdAt'
+PR_FIELDS = (
+    'number,title,url,isDraft,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,'
+    'createdAt,updatedAt'
+)
 
 
 def _days(stamp: str, now: datetime) -> int:
@@ -176,7 +179,9 @@ def _ago(days: int) -> str:
     return 'today' if days == 0 else f'{days} day{"" if days == 1 else "s"}'
 
 
-def pr_items(repo: str, prs: Sequence[dict[str, Any]], now: datetime) -> list[Item]:
+def pr_items(
+    repo: str, prs: Sequence[dict[str, Any]], now: datetime, stale_after_days: int = 14
+) -> list[Item]:
     items = []
     for pr in prs:
         label = f'PR #{pr["number"]} {pr["title"]}'
@@ -195,12 +200,21 @@ def pr_items(repo: str, prs: Sequence[dict[str, Any]], now: datetime) -> list[It
             )
         elif pr.get('mergeable') == 'CONFLICTING':
             items.append(Item(repo, BLOCKED, f'{label}: conflicts with its base', pr['url']))
+        elif (idle := _days(pr.get('updatedAt') or pr['createdAt'], now)) > stale_after_days:
+            # Nobody has touched it: a decision is due, to review it or replace it with a
+            # fresh one. mason never adds to an open PR, so it only says so.
+            items.append(
+                Item(repo, DECIDE, f'{label}: stale, no activity in {_ago(idle)}', pr['url'])
+            )
         elif pr.get('reviewDecision') == 'CHANGES_REQUESTED':
             items.append(Item(repo, REVIEW, f'{label}: changes requested, open {days}', pr['url']))
         elif pr.get('isDraft'):
             items.append(Item(repo, REVIEW, f'{label}: draft, unverified, open {days}', pr['url']))
         else:
-            items.append(Item(repo, REVIEW, f'{label}: waiting for review, open {days}', pr['url']))
+            behind = ', behind its base' if pr.get('mergeStateStatus') == 'BEHIND' else ''
+            items.append(
+                Item(repo, REVIEW, f'{label}: waiting for review, open {days}{behind}', pr['url'])
+            )
     return items
 
 
@@ -244,7 +258,11 @@ def github_items(repo: str, run_gh: projects.Gh, now: datetime) -> list[Item]:
                 )
             ]
         data = json.loads(out or '[]')
-        found += pr_items(repo, data, now) if kind == 'pr' else issue_items(repo, data, now)
+        if kind == 'pr':
+            stale = project.value(repo, 'limits', 'stale_after_days') or 14
+            found += pr_items(repo, data, now, stale)
+        else:
+            found += issue_items(repo, data, now)
     return found
 
 

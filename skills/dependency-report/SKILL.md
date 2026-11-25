@@ -3,7 +3,7 @@ name: dependency-report
 description: 'This skill should be used when asked to "run the dependency report", "write the monthly security report", "report the vulnerabilities fixed this month", "publish the dependency report for <month>" or "backfill the dependency reports", in a project, interactively or unattended (from a scheduler or another agent). A script counts one calendar month of the Dependabot alert history: vulnerabilities and alerts fixed, still open, and time to fix against targets, for the month and the year so far. This skill adds a plain-language account of what is still open and the plan for it, keeps the report as mason''s copy, and publishes it where the project''s settings say (by default a new post in its Discussions), for the people the project answers to.'
 version: 1.5.0
 metadata:
-  mason-requires: '>=0.4,<0.5'
+  mason-requires: '>=0.4,<0.6'
   mason-task: 'Run the dependency report for this project'
   mason-schedule: 'monthly day 2 06:00'
   mason-kind: 'report'

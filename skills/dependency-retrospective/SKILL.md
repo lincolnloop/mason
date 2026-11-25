@@ -3,7 +3,7 @@ name: dependency-retrospective
 description: 'This skill should be used when asked to "run the dependency retrospective", "review how the dependency upgrades are going", "check the upgrade outcomes", "are we keeping up with security alerts" or "find abandoned packages" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over dependency-upgrades: a script collects what happened to the upgrade PRs and the alerts over a period, and this skill judges it in three areas: whether alerts are fixed fast enough, whether the upgrade skill classified correctly, and which packages look stale or abandoned. It opens one report issue, and proposes changes to the upgrade skill as a PR when the evidence warrants it.'
 version: 1.3.1
 metadata:
-  mason-requires: '>=0.4,<0.5'
+  mason-requires: '>=0.4,<0.6'
   mason-task: 'Run the dependency retrospective for this project'
   mason-schedule: 'monthly day 3 06:00'
   mason-kind: 'report'

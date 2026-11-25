@@ -130,15 +130,21 @@ mason owns the schedule, and says what was done, what is due and what was missed
 
 ## 0.5: following work through
 
-PRs that are opened become changes that are merged.
+PRs that are opened don't sit unnoticed, and what a run left for a person can be decided in one
+place.
 
-- **PR follow-through:** a workflow that watches mason's own PRs, rebases those `main` has moved
-  past, and reports CI failures and conflicts to the inbox, or fixes what it can.
-- **The decide step** (`design.md` §4): merging under a project's written policy (patch-only, CI
-  green, no skipped check, only manifests touched). Off by default.
+- **PR follow-through** (built, report only): mason never adds to an open PR, since a reviewer
+  part-way through it wouldn't notice. The inbox reports what needs doing to mason's PRs: failing
+  CI and conflicts (blocked), stale ones with no activity in `limits.stale_after_days` (a
+  decision), and ones behind their base. `dependency-upgrades` replaces a stale PR of its own
+  with a fresh one rather than waiting on it; closing it is confirm first, deferred to the inbox
+  when unattended.
 - **Approving from the inbox** (built): `mason approve <id>` takes a deferred action after
   showing it and asking, running its command only if it is a `gh` or `mason` command, and
   `mason dismiss <id> --reason` declines it. Either clears it from the inbox.
+- **The decide step** (`design.md` §4), merging under a project's written policy, is moved to
+  Later: merging stays a person's decision until the retrospectives have a record of how
+  mason's PRs fare.
 
 ## 0.6: safety and identity
 
@@ -155,6 +161,9 @@ What makes it safe to run more workflows, from more sources, on more projects.
 
 Ordered roughly by when they are likely to matter. Each gets a design before it is built.
 
+- **The decide step:** merging mason's PRs under a project's written policy (patch-only, CI
+  green, no skipped check, only manifests touched), off by default, once the retrospectives
+  show how mason's PRs fare.
 - **Cost tracking.** Each run records its token use and model in the ledger; budgets per
   project and workflow, which `run-due` respects; the model chosen per workflow. Not a priority
   while the business doesn't account for token costs; it becomes one if they rise.

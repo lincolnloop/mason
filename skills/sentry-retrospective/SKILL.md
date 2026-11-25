@@ -3,7 +3,7 @@ name: sentry-retrospective
 description: 'This skill should be used when asked to "run the Sentry retrospective", "did the Sentry fixes work", "are the errors coming back" or "how are we doing on Sentry errors" in a project, interactively or unattended (from a scheduler or another agent). It is the outer loop over sentry-errors: a script checks, for every fix PR, whether its Sentry issues stopped after the merge, and collects the triage issues and what is still unresolved. This skill judges why fixes didn''t work, what keeps recurring, and what the project should change so the same class of error doesn''t ship again. It opens one report issue, and proposes skill changes as a PR when the evidence warrants it.'
 version: 1.2.1
 metadata:
-  mason-requires: '>=0.4,<0.5'
+  mason-requires: '>=0.4,<0.6'
   mason-task: 'Run the Sentry retrospective for this project'
   mason-schedule: 'monthly day 3 06:00'
   mason-kind: 'report'

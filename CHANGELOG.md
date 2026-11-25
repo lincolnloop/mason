@@ -9,6 +9,11 @@ its skills from the same tag: each skill states the mason versions it works with
   either clears it from the inbox. Approving runs the recorded command only if it is a `gh` or
   `mason` command, after asking; anything else is shown for you to run.
 
+- The inbox reports mason's PRs that are stale (no activity in `limits.stale_after_days`) or
+  behind their base. mason still never adds to an open PR.
+- `dependency-upgrades` replaces a stale upgrade PR of its own with a fresh one: closing it is
+  confirm first, and deferred to the inbox when unattended.
+
 ## 0.4.1
 
 - The retrospectives cover the calendar period their run is for (`mason run` and `run-due` set
