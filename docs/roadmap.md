@@ -136,8 +136,9 @@ PRs that are opened become changes that are merged.
   past, and reports CI failures and conflicts to the inbox, or fixes what it can.
 - **The decide step** (`design.md` §4): merging under a project's written policy (patch-only, CI
   green, no skipped check, only manifests touched). Off by default.
-- **Approving from the inbox:** a confirm-first action recorded by an unattended run is taken
-  when the developer approves it, without re-running the workflow.
+- **Approving from the inbox** (built): `mason approve <id>` takes a deferred action after
+  showing it and asking, running its command only if it is a `gh` or `mason` command, and
+  `mason dismiss <id> --reason` declines it. Either clears it from the inbox.
 
 ## 0.6: safety and identity
 

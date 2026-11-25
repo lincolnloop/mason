@@ -469,6 +469,17 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument('--count', action='store_true', help='print how many; exit 1 if any')
 
     cmd = commands.add_parser(
+        'approve', help="take an action a run left for you, by its inbox id ('<run>#<n>')"
+    )
+    cmd.add_argument('id')
+    cmd.add_argument('--repo', required=True, help='owner/name')
+    cmd.add_argument('--yes', action='store_true', help='ask nothing')
+    cmd = commands.add_parser('dismiss', help='decline an action a run left for you, by its id')
+    cmd.add_argument('id')
+    cmd.add_argument('--repo', required=True, help='owner/name')
+    cmd.add_argument('--reason', required=True)
+
+    cmd = commands.add_parser(
         'defer', help='record an action an unattended run left for a person, for `mason inbox`'
     )
     cmd.add_argument('run', type=Path, help="the run's directory (run-start's `dir`)")
@@ -1446,6 +1457,56 @@ def _inbox(args: argparse.Namespace) -> str:
     return inbox.to_json(items) if args.json else inbox.render(items)
 
 
+def _approve(args: argparse.Namespace) -> str:
+    try:
+        item = inbox.describe(args.repo, args.id)
+    except inbox.InboxError as exc:
+        raise Refused(str(exc)) from exc
+    command = item.get('command', '')
+    print(f'{item["action"]}\n  why: {item["reason"]}', file=sys.stderr)
+    words = inbox.runnable(command) if command else None
+    if words is None:
+        shown = f'\n  {command}' if command else ''
+        print(
+            f'mason runs only gh and mason commands it was given; do this yourself:{shown}',
+            file=sys.stderr,
+        )
+        if not args.yes and _ask('Mark it done? [y/N] ').strip().lower() not in ('y', 'yes'):
+            return 'Left in the inbox.\n'
+        inbox.decide(args.repo, args.id, 'done by hand')
+        return f'{args.id}: marked done\n'
+    print(f'  runs: {shlex.join(words)}', file=sys.stderr)
+    if not args.yes and _ask('Run it? [y/N] ').strip().lower() not in ('y', 'yes'):
+        return 'Left in the inbox.\n'
+    clone = paths.clone(args.repo)
+    try:
+        result = subprocess.run(
+            words,
+            cwd=clone if clone.is_dir() else None,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise Refused(f'{words[0]} is not installed') from exc
+    if result.returncode != 0:
+        raise Refused(
+            f'{result.stdout}{result.stderr}it failed (status {result.returncode}); left in the inbox'
+        )
+    inbox.decide(args.repo, args.id, 'approved')
+    return f'{result.stdout}{args.id}: approved and done\n'
+
+
+def _dismiss(args: argparse.Namespace) -> str:
+    try:
+        if not args.reason.strip():
+            raise inbox.InboxError('--reason is empty')
+        inbox.decide(args.repo, args.id, 'dismissed', args.reason.strip())
+    except inbox.InboxError as exc:
+        raise Refused(str(exc)) from exc
+    return f'{args.id}: dismissed\n'
+
+
 def _defer(args: argparse.Namespace) -> str:
     try:
         return inbox.defer(args.run, args.action, args.reason, args.suggested)
@@ -1700,6 +1761,8 @@ COMMANDS = {
     'project': _project,
     'inbox': _inbox,
     'defer': _defer,
+    'approve': _approve,
+    'dismiss': _dismiss,
     'save-result': _save_result,
     'publish': _publish,
     'results': _results,

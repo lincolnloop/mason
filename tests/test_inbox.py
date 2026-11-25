@@ -277,6 +277,100 @@ class CliTests(Clean):
         self.assertEqual((result.returncode, result.stdout), (0, '0\n'))
 
 
+class ApproveTests(Clean):
+    def setUp(self) -> None:
+        self._bin = tempfile.TemporaryDirectory()
+        bin_dir = Path(self._bin.name)
+        self.record = bin_dir / 'calls'
+        fake = bin_dir / 'gh'
+        fake.write_text(
+            f'#!/bin/sh\necho "$*" >> {self.record}\n[ "$1" = fail ] && exit 4\necho made it\n'
+        )
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+        self.env = dict(os.environ, PATH=f'{bin_dir}:{os.environ["PATH"]}')
+        settings(
+            REPO,
+            '[workflows]\nenabled = ["dependency-assessment"]\n[schedule]\ndependency-assessment = "off"\n',
+        )
+        self.run = start_run(REPO, '20261125-090000-dependency-assessment')
+        inbox.defer(self.run, 'Create the label', 'counts open PRs', 'gh label create automation')
+        inbox.defer(self.run, 'Delete the branch', 'stale', 'git push origin --delete x')
+        inbox.defer(self.run, 'Fail', 'a test', 'gh fail')
+
+    def tearDown(self) -> None:
+        super().tearDown()
+        self._bin.cleanup()
+
+    def mason(self, *args: str, stdin: str = '') -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, '-I', str(ROOT / 'bin' / 'artifact'), *args],
+            capture_output=True, text=True, input=stdin, env=self.env, check=False,
+        )  # fmt: skip
+
+    def ids(self) -> list[str]:
+        return [i.id for i in inbox.local_items(REPO, ['dependency-assessment'], dict(os.environ))]
+
+    def test_ids_in_the_inbox(self) -> None:
+        run_id = self.run.name
+        self.assertEqual(self.ids(), [f'{run_id}#1', f'{run_id}#2', f'{run_id}#3'])
+        items = inbox.local_items(REPO, ['dependency-assessment'], dict(os.environ))
+        self.assertIn(f'[{run_id}#1]', items[0].line())
+
+    def test_approve_runs_gh_and_clears_it(self) -> None:
+        item = f'{self.run.name}#1'
+        self.assertEqual(
+            self.mason('approve', item, '--repo', REPO, stdin='n\n').stdout, 'Left in the inbox.\n'
+        )
+        result = self.mason('approve', item, '--repo', REPO, stdin='y\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('approved and done', result.stdout)
+        self.assertEqual(self.record.read_text(), 'label create automation\n')
+        self.assertNotIn(item, self.ids())
+        self.assertIn(
+            'already approved', self.mason('approve', item, '--repo', REPO, '--yes').stderr
+        )
+
+    def test_anything_but_gh_or_mason_is_for_a_person(self) -> None:
+        item = f'{self.run.name}#2'
+        result = self.mason('approve', item, '--repo', REPO, '--yes')
+        self.assertIn('do this yourself', result.stderr)
+        self.assertIn('git push origin --delete x', result.stderr)
+        self.assertIn('marked done', result.stdout)
+        self.assertFalse(self.record.exists())
+        self.assertEqual(inbox._deferred(self.run / inbox.DEFERRED)[1]['decided'], 'done by hand')
+
+    def test_a_failed_command_stays_in_the_inbox(self) -> None:
+        item = f'{self.run.name}#3'
+        result = self.mason('approve', item, '--repo', REPO, '--yes')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('status 4', result.stderr)
+        self.assertIn(item, self.ids())
+
+    def test_dismiss_and_bad_ids(self) -> None:
+        item = f'{self.run.name}#2'
+        self.assertIn(
+            'dismissed',
+            self.mason('dismiss', item, '--repo', REPO, '--reason', 'kept on purpose').stdout,
+        )
+        self.assertEqual(inbox._deferred(self.run / inbox.DEFERRED)[1]['note'], 'kept on purpose')
+        self.assertIn(
+            'an id is', self.mason('dismiss', 'nope', '--repo', REPO, '--reason', 'x').stderr
+        )
+        self.assertIn(
+            'no such',
+            self.mason('dismiss', f'{self.run.name}#9', '--repo', REPO, '--reason', 'x').stderr,
+        )
+
+    def test_runnable(self) -> None:
+        self.assertEqual(
+            inbox.runnable("gh issue close 4 --comment 'done, thanks'"),
+            ['gh', 'issue', 'close', '4', '--comment', 'done, thanks'],
+        )
+        for command in ('rm -rf /', 'gh "unclosed', '', 'bash -c "gh x"'):
+            with self.subTest(command=command):
+                self.assertIsNone(inbox.runnable(command))
+
+
 class StatusTests(unittest.TestCase):
     def test_written_beside_the_log(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

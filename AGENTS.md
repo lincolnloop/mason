@@ -57,7 +57,8 @@ Style: single quotes, 100-character lines, explicit type hints, ruff for lint an
 - Schedules: `uv run mason status|due|overdue [--repo <owner>/<repo>]`, `mason history <repo>
   <workflow>`, `mason skip <repo> <workflow> <period> --reason <why>`, `mason schedule set <repo>
   <workflow> '<schedule>'`, `mason run-due [--dry-run]`, `mason schedule install [--systemd|--cron]`
-- What needs the developer: `uv run mason inbox [--repo <owner>/<repo>] [--count] [--json]`
+- What needs the developer: `uv run mason inbox [--repo <owner>/<repo>] [--count] [--json]`;
+  `mason approve|dismiss <run>#<n> --repo <owner>/<repo>` for a deferred action
 - Everything else: `uv run mason --help`
 - After changing dependencies in `pyproject.toml`: `uv lock`, and commit `uv.lock` with it.
 

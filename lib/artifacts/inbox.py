@@ -9,6 +9,7 @@ with an item where it lives clears it from the inbox.
 
 import json
 import os
+import shlex
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -36,10 +37,13 @@ class Item:
     text: str
     # Where it is dealt with: a URL, a log, or a command.
     where: str
+    # A deferred action's id, for `mason approve` and `mason dismiss`.
+    id: str = ''
 
     def line(self) -> str:
         mark = '!' if self.kind in (BROKEN, BLOCKED) else '-'
-        return f'  {mark} {self.text}\n      {self.where}'
+        handle = f'  [{self.id}]' if self.id else ''
+        return f'  {mark} {self.text}{handle}\n      {self.where}'
 
 
 # --- Deferred actions --------------------------------------------------------------------------
@@ -77,6 +81,58 @@ def _deferred(path: Path) -> list[dict[str, str]]:
     ):
         raise InboxError(f'{path}: must be a list of {{"action", "reason"}} objects')
     return items
+
+
+# Approving runs the recorded command only when it is one of these: an agent wrote it, partly
+# from text it read, so anything else is shown for the developer to run themselves.
+RUNNABLE = ('gh', 'mason')
+
+
+def _find(repo: str, item_id: str, env: Mapping[str, str] | None) -> tuple[Path, list, int]:
+    run_id, _, number = item_id.partition('#')
+    if not number.isdigit() or not projects.RUN_NAME.match(run_id):
+        raise InboxError(f'{item_id}: an id is <run>#<n>, as `mason inbox` shows it')
+    path = paths.runs(repo, env) / run_id / DEFERRED
+    items = _deferred(path)
+    index = int(number) - 1
+    if not 0 <= index < len(items):
+        raise InboxError(f'{item_id}: no such deferred action for {repo}')
+    if items[index].get('decided'):
+        raise InboxError(f'{item_id}: already {items[index]["decided"]}')
+    return path, items, index
+
+
+def describe(repo: str, item_id: str, env: Mapping[str, str] | None = None) -> dict[str, str]:
+    _, items, index = _find(repo, item_id, env)
+    return items[index]
+
+
+def decide(
+    repo: str,
+    item_id: str,
+    decision: str,
+    note: str = '',
+    env: Mapping[str, str] | None = None,
+    now: datetime | None = None,
+) -> None:
+    """Record what the developer decided about a deferred action, so the inbox clears it."""
+    path, items, index = _find(repo, item_id, env)
+    items[index] = {
+        **items[index],
+        'decided': decision,
+        'decided_at': (now or datetime.now(UTC)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        **({'note': note} if note else {}),
+    }
+    path.write_text(json.dumps(items, indent=2) + '\n', encoding='utf-8')
+
+
+def runnable(command: str) -> list[str] | None:
+    """The command as arguments, when approving may run it; None when a person must."""
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return None
+    return words if words and words[0] in RUNNABLE else None
 
 
 # --- Run records -------------------------------------------------------------------------------
@@ -273,13 +329,16 @@ def local_items(repo: str, workflows: Sequence[str], env: Mapping[str, str]) -> 
         except InboxError as exc:
             found.append(Item(repo, BROKEN, f'{name}: unreadable deferred actions', str(exc)))
             continue
-        for d in deferred:
+        for number, d in enumerate(deferred, start=1):
+            if d.get('decided'):
+                continue
             found.append(
                 Item(
                     repo,
                     DECIDE,
                     f'{d["action"]} ({name}, run {directory.name}): {d["reason"]}',
                     d.get('command') or str(directory),
+                    f'{directory.name}#{number}',
                 )
             )
     return found

@@ -237,6 +237,18 @@ mason inbox --count              # prints how many; exits 1 if any, for a status
 mason inbox --json
 ```
 
+A deferred action shows its id (`[<run>#<n>]`). Approve it to take it, or dismiss it with a
+reason; either clears it:
+
+```sh
+mason approve 20261125-090000-dependency-assessment#1 --repo <owner>/<repo>
+mason dismiss 20261125-090000-dependency-assessment#2 --repo <owner>/<repo> --reason 'kept on purpose'
+```
+
+Approving shows the action and its command and asks first. mason runs the command only if it is
+a `gh` or `mason` command: an agent wrote it, partly from text it read. Anything else is shown
+for you to run, and approving marks it done.
+
 Nothing in it is kept by hand: each item comes from GitHub (open PRs and issues with the
 `automation` label) and this machine's run records, every time. Merging the PR, answering the
 issue, or a later run of the same workflow clears it.
